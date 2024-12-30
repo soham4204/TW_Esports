@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase-config';
 import logo from '../assets/Logo.png';
+import { Trash2, Edit } from 'lucide-react';
 import BackButton from '../components/BackButton';
 
 const AdminDashboard = () => {
@@ -16,36 +17,117 @@ const AdminDashboard = () => {
     const [selectedTournament, setSelectedTournament] = useState(null);
     const [showTournamentList, setShowTournamentList] = useState(false);
     const [teams, setTeams] = useState({});
+    const [isEditing, setIsEditing] = useState(false);
+    const [editingId, setEditingId] = useState(null);
 
     useEffect(() => {
-        const fetchTournaments = async () => {
-            try {
-                const tournamentsSnapshot = await db.collection('tournaments').get();
-                const tournamentsData = tournamentsSnapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data(),
-                }));
-                setTournaments(tournamentsData);
-            } catch (error) {
-                console.error('Error fetching tournaments: ', error);
-            }
-        };
-
         fetchTournaments();
     }, []);
 
-    const toggleForm = () => {
-        setShowForm(!showForm);
+    const fetchTournaments = async () => {
+        try {
+            const tournamentsSnapshot = await db.collection('tournaments').get();
+            const tournamentsData = tournamentsSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+            }));
+            setTournaments(tournamentsData);
+        } catch (error) {
+            console.error('Error fetching tournaments: ', error);
+        }
     };
 
-    const handleManageTournaments = () => {
-        setShowTournamentList(!showTournamentList);
+    const toggleForm = () => {
+        setShowForm(!showForm);
+        if (!showForm) {
+            resetForm();
+        }
+    };
+
+    const resetForm = () => {
+        setTournamentName('');
+        setDescription('');
+        setThumbnailURL('');
+        setSlots('');
+        setDiscordLink('');
+        setType('');
+        setIsEditing(false);
+        setEditingId(null);
+    };
+
+    const handleEditTournament = (tournament) => {
+        setTournamentName(tournament.name);
+        setDescription(tournament.description);
+        setThumbnailURL(tournament.thumbnail);
+        setSlots(tournament.slots);
+        setDiscordLink(tournament.discordlink);
+        setType(tournament.type);
+        setIsEditing(true);
+        setEditingId(tournament.id);
+        setShowForm(true);
         setSelectedTournament(null);
     };
 
-    const handleTournamentClick = async (tournament) => {
-        setSelectedTournament(tournament);
-        await fetchTeams(tournament.id);
+    const handleDeleteTournament = async (tournamentId) => {
+        if (window.confirm('Are you sure you want to delete this tournament?')) {
+            try {
+                await db.collection('tournaments').doc(tournamentId).delete();
+                setSuccessMessage('Tournament deleted successfully');
+                fetchTournaments();
+                setSelectedTournament(null);
+            } catch (error) {
+                console.error('Error deleting tournament: ', error);
+                setSuccessMessage('Error deleting tournament');
+            }
+        }
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        try {
+            const tournamentData = {
+                name: tournamentName,
+                description,
+                thumbnail: thumbnailURL,
+                slots,
+                discordlink,
+                type,
+            };
+
+            if (isEditing) {
+                await db.collection('tournaments').doc(editingId).update(tournamentData);
+                setSuccessMessage('Tournament updated successfully');
+            } else {
+                await db.collection('tournaments').doc(tournamentName).set(tournamentData);
+                setSuccessMessage('Tournament added successfully');
+            }
+
+            resetForm();
+            setShowForm(false);
+            fetchTournaments();
+        } catch (error) {
+            console.error('Error adding/updating tournament: ', error);
+            setSuccessMessage('');
+        }
+    };
+
+    const renderTeamPlayers = (team) => {
+        const players = [
+            { name: team.player1InGameName, id: team.player1Id },
+            { name: team.player2InGameName, id: team.player2Id },
+            { name: team.player3InGameName, id: team.player3Id },
+        ].filter(player => player.name && player.id); // Filter out empty player slots
+    
+        return (
+            <ul className="mt-2">
+                {players.map((player, index) => (
+                    <li key={index} className="ml-4">
+                        <p>Player Name: {player.name}</p>
+                        <p>Player ID: {player.id}</p>
+                    </li>
+                ))}
+            </ul>
+        );
     };
 
     const fetchTeams = async (tournamentId) => {
@@ -61,48 +143,14 @@ const AdminDashboard = () => {
         }
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        try {
-            await db.collection('tournaments').doc(tournamentName).set({
-                name: tournamentName,
-                description,
-                thumbnail: thumbnailURL,
-                slots,
-                discordlink,
-                type,
-            });
-            setTournamentName('');
-            setDescription('');
-            setThumbnailURL('');
-            setSlots('');
-            setDiscordLink('');
-            setType('');
-            setSuccessMessage('Tournament added successfully');
-            setShowForm(false);
-        } catch (error) {
-            console.error('Error adding tournament: ', error);
-            setSuccessMessage('');
-        }
+    const handleManageTournaments = () => {
+        setShowTournamentList(!showTournamentList);
+        setSelectedTournament(null);
     };
 
-    const renderTeamPlayers = (team) => {
-        const players = [
-            { name: team.player1InGameName, id: team.player1Id },
-            { name: team.player2InGameName, id: team.player2Id },
-            { name: team.player3InGameName, id: team.player3Id },
-        ].filter(player => player.name && player.id); // Filter out empty player slots
-
-        return (
-            <ul className="mt-2">
-                {players.map((player, index) => (
-                    <li key={index} className="ml-4">
-                        <p>Player Name: {player.name}</p>
-                        <p>Player ID: {player.id}</p>
-                    </li>
-                ))}
-            </ul>
-        );
+    const handleTournamentClick = async (tournament) => {
+        setSelectedTournament(tournament);
+        await fetchTeams(tournament.id);
     };
 
     return (
@@ -124,7 +172,7 @@ const AdminDashboard = () => {
                 </div>
                 {showForm && (
                     <form className="mt-4 w-full" onSubmit={handleSubmit}>
-                        <input type="text" value={tournamentName} onChange={(e) => setTournamentName(e.target.value)} placeholder="Tournament Name" required className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 mb-4 focus:outline-none focus:border-blue-500" />
+                        <input type="text" value={tournamentName} onChange={(e) => setTournamentName(e.target.value)} placeholder="Tournament Name" required className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 mb-4 focus:outline-none focus:border-blue-500" disabled={isEditing} />
                         <select value={type} onChange={(e) => setType(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 mb-4 focus:outline-none focus:border-blue-500" required>
                             <option value="">Select Tournament Type</option>
                             <option value="1v1">1v1</option>
@@ -135,7 +183,9 @@ const AdminDashboard = () => {
                         <input type="text" value={thumbnailURL} onChange={(e) => setThumbnailURL(e.target.value)} placeholder="Thumbnail URL" required className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 mb-4 focus:outline-none focus:border-blue-500" />
                         <input type="number" value={slots} onChange={(e) => setSlots(e.target.value)} placeholder="Slots" required className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 mb-4 focus:outline-none focus:border-blue-500" />
                         <input type="text" value={discordlink} onChange={(e) => setDiscordLink(e.target.value)} placeholder="Discord URL" required className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 mb-4 focus:outline-none focus:border-blue-500" />            
-                        <button type="submit" className="bg-blue-500 text-white px-4 py-2 rounded-lg mt-2">Submit</button>
+                        <button type="submit" className="bg-blue-500 text-white px-4 py-2 rounded-lg mt-2">
+                            {isEditing ? 'Update Tournament' : 'Submit'}
+                        </button>
                     </form>
                 )}
                 {successMessage && (
@@ -144,11 +194,30 @@ const AdminDashboard = () => {
                 {showTournamentList && !selectedTournament && (
                     <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                         {tournaments.map(tournament => (
-                            <div key={tournament.id} className="bg-gray-800 p-4 rounded-lg cursor-pointer" onClick={() => handleTournamentClick(tournament)}>
-                                <h2 className="text-xl font-semibold">{tournament.name}</h2>
-                                <h3 className="text-xl font-semibold">{tournament.description}</h3>
-                                <p>Slots: {tournament.slots}</p>
-                                <img src={tournament.thumbnail} alt="Tournament Thumbnail" className="mt-2 rounded-lg" style={{ maxWidth: '100%' }} />
+                            <div key={tournament.id} className="bg-gray-800 p-4 rounded-lg">
+                                <div className="flex justify-end space-x-2 mb-2">
+                                    <button
+                                        onClick={() => handleEditTournament(tournament)}
+                                        className="p-2 bg-blue-500 rounded-full hover:bg-blue-600"
+                                    >
+                                        <Edit size={16} />
+                                    </button>
+                                    <button
+                                        onClick={() => handleDeleteTournament(tournament.id)}
+                                        className="p-2 bg-red-500 rounded-full hover:bg-red-600"
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
+                                </div>
+                                <div 
+                                    className="cursor-pointer" 
+                                    onClick={() => handleTournamentClick(tournament)}
+                                >
+                                    <h2 className="text-xl font-semibold">{tournament.name}</h2>
+                                    <h3 className="text-xl font-semibold">{tournament.description}</h3>
+                                    <p>Slots: {tournament.slots}</p>
+                                    <img src={tournament.thumbnail} alt="Tournament Thumbnail" className="mt-2 rounded-lg" style={{ maxWidth: '100%' }} />
+                                </div>
                             </div>
                         ))}
                     </div>
