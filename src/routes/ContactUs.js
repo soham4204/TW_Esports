@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import logo from '../assets/Logo.png';
-import BackButton from '../components/BackButton';
+import Navbar from '../components/Navbar';
 
 const ContactUsComponent = () => {
     const [email, setEmail] = useState('');
@@ -40,28 +40,55 @@ const ContactUsComponent = () => {
     };
 
     return (
-        <div className="flex flex-col overflow-auto items-center justify-center h-screen bg-gray-900 text-white w-full">
-            <div className="text-center h-full w-4/5">
-                <div className="mt-4 flex float-start">
-                    <BackButton path="/home"/>
+        <div className="h-screen overflow-auto w-full bg-slate-900 text-white">
+            <Navbar/>
+            <div className="p-6 max-w-3xl mx-auto">
+                <div className="border border-slate-400 rounded-lg shadow-md bg-slate-900">
+                    <div className="p-8 text-center">
+                        <img src={logo} alt="TW Esports Logo" className="h-32 mx-auto mb-6" />
+                        <form onSubmit={handleSubmit} className="space-y-6">
+                            <input 
+                                type="email" 
+                                placeholder="Email" 
+                                value={email} 
+                                onChange={(e) => setEmail(e.target.value)} 
+                                required 
+                                className="bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 w-full focus:outline-none focus:border-blue-500"
+                            />
+                            <input 
+                                type="text" 
+                                placeholder="Subject" 
+                                value={subject} 
+                                onChange={(e) => setSubject(e.target.value)} 
+                                required 
+                                className="bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 w-full focus:outline-none focus:border-blue-500"
+                            />
+                            <textarea 
+                                placeholder="Message" 
+                                value={message} 
+                                onChange={(e) => setMessage(e.target.value)} 
+                                required 
+                                rows={5} 
+                                className="bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 w-full focus:outline-none focus:border-blue-500"
+                            />
+                            <button 
+                                type="submit" 
+                                disabled={submitting} 
+                                className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-semibold"
+                            >
+                                {submitting ? 'Submitting...' : 'Submit'}
+                            </button>
+                            {submitted && (
+                                <p className="text-green-500 mt-4">
+                                    Message submitted successfully!
+                                </p>
+                            )}
+                        </form>
+                    </div>
                 </div>
-                <div className="w-full flex justify-center mt-6">
-                    <img src={logo} alt="TW Esports Logo" className="flex h-24 mb-4" />
-                </div>
-                <h1 className="text-3xl font-bold">Contact Us</h1>
-                <form className="mt-4 flex flex-col justify-center" onSubmit={handleSubmit}>
-                    <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 mb-4 focus:outline-none focus:border-blue-500" />
-                    <input type="text" placeholder="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} required className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 mb-4 focus:outline-none focus:border-blue-500" />
-                    <textarea placeholder="Message" value={message} onChange={(e) => setMessage(e.target.value)} required rows={4} className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 mb-4 focus:outline-none focus:border-blue-500"></textarea>
-                    <button type="submit" disabled={submitting} className="ml-4 bg-blue-500 text-white px-8 py-3 rounded-lg text-lg font-semibold my-2 mx-4">
-                        {submitting ? 'Submitting...' : 'Submit'}
-                    </button>
-                    {submitted && <p className="text-green-500">Message submitted successfully!</p>}
-                </form>
             </div>
         </div>
     );
-
 }
 
 export default ContactUsComponent;

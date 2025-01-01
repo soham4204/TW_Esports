@@ -1,7 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase-config';
 import logo from '../assets/Logo.png';
-import { Trash2, Edit } from 'lucide-react';
+import { 
+    Trash2, 
+    Edit, 
+    Plus, 
+    X, 
+    Users, 
+    Calendar, 
+    Link as LinkIcon, 
+    Image,
+    ChevronDown,
+    AlertCircle,
+    Check
+} from 'lucide-react';
 import BackButton from '../components/BackButton';
 
 const AdminDashboard = () => {
@@ -174,86 +186,215 @@ const AdminDashboard = () => {
     };
 
     return (
-        <div className="w-full flex flex-col items-center justify-center h-screen overflow-auto bg-gray-900 text-white">
-            <div className="w-4/5 text-center h-full">
-                <div className="mt-4 flex float-start">
+        <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white">
+            <div className="max-w-7xl mx-auto px-4 py-6">
+                <div className="flex justify-between items-center mb-8">
                     <BackButton path="/" />
+                    <img src={logo} alt="TW Esports Logo" className="h-16" />
                 </div>
-                <div className="w-full flex justify-center mt-6">
-                    <img src={logo} alt="TW Esports Logo" className="flex h-24 mb-8" />
-                </div>
-                <div className="flex flex-row space-x-2 justify-between items-center mb-4 text-center">
-                    <button className="flex w-1/2 bg-blue-500 text-white px-2 py-3 rounded-lg text-lg font-semibold text-center" onClick={toggleForm}>
-                        {showForm ? "Close" : "Add Tournament"}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                    <button 
+                        onClick={toggleForm}
+                        className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 transition-colors p-4 rounded-lg text-lg font-medium"
+                    >
+                        {showForm ? <X className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
+                        {showForm ? "Close Form" : "Add Tournament"}
                     </button>
-                    <button className="flex w-1/2 bg-blue-500 text-white px-2 py-3 rounded-lg text-lg font-semibold text-center" onClick={handleManageTournaments}>
-                        {showTournamentList ? "Close" : "Manage Tournaments"}
+                    <button 
+                        onClick={handleManageTournaments}
+                        className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 transition-colors p-4 rounded-lg text-lg font-medium"
+                    >
+                        <Users className="h-5 w-5" />
+                        {showTournamentList ? "Close Manager" : "Manage Tournaments"}
                     </button>
                 </div>
-                {showForm && (
-                    <form className="mt-4 w-full" onSubmit={handleSubmit}>
-                        <input type="text" value={tournamentName} onChange={(e) => setTournamentName(e.target.value)} placeholder="Tournament Name" required className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 mb-4 focus:outline-none focus:border-blue-500" disabled={isEditing} />
-                        <select value={type} onChange={(e) => setType(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 mb-4 focus:outline-none focus:border-blue-500" required>
-                            <option value="">Select Tournament Type</option>
-                            <option value="1v1">1v1</option>
-                            <option value="2v2">2v2</option>
-                            <option value="3v3">3v3</option>
-                        </select>
-                        <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description" required className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 mb-4 focus:outline-none focus:border-blue-500" />
-                        <input type="text" value={thumbnailURL} onChange={(e) => setThumbnailURL(e.target.value)} placeholder="Thumbnail URL" required className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 mb-4 focus:outline-none focus:border-blue-500" />
-                        <input type="number" value={slots} onChange={(e) => setSlots(e.target.value)} placeholder="Slots" required className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 mb-4 focus:outline-none focus:border-blue-500" />
-                        <input type="text" value={discordlink} onChange={(e) => setDiscordLink(e.target.value)} placeholder="Discord URL" required className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 mb-4 focus:outline-none focus:border-blue-500" />            
-                        <button type="submit" className="bg-blue-500 text-white px-4 py-2 rounded-lg mt-2">
-                            {isEditing ? 'Update Tournament' : 'Submit'}
-                        </button>
-                    </form>
-                )}
+
                 {successMessage && (
-                    <p className="mt-4 text-green-500">{successMessage}</p>
+                    <div className="mb-6 bg-green-600 text-white p-4 rounded-lg flex items-center gap-2">
+                        <Check className="h-5 w-5" />
+                        <p>{successMessage}</p>
+                    </div>
                 )}
-                {showTournamentList && !selectedTournament && (
-                    <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                        {tournaments.map(tournament => (
-                            <div key={tournament.id} className="bg-gray-800 p-4 rounded-lg">
-                                <div className="flex justify-end space-x-2 mb-2">
-                                    <button
-                                        onClick={() => handleEditTournament(tournament)}
-                                        className="p-2 bg-blue-500 rounded-full hover:bg-blue-600"
-                                    >
-                                        <Edit size={16} />
-                                    </button>
-                                    <button
-                                        onClick={() => handleDeleteTournament(tournament.id)}
-                                        className="p-2 bg-red-500 rounded-full hover:bg-red-600"
-                                    >
-                                        <Trash2 size={16} />
-                                    </button>
+
+                {showForm && (
+                    <div className="mb-8 bg-gray-800 border border-gray-700 rounded-lg p-6">
+                        <div className="mb-6">
+                            <h2 className="text-2xl font-bold">
+                                {isEditing ? 'Edit Tournament' : 'Create New Tournament'}
+                            </h2>
+                        </div>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium">Tournament Name</label>
+                                    <div className="relative">
+                                        <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                                        <input
+                                            type="text"
+                                            value={tournamentName}
+                                            onChange={(e) => setTournamentName(e.target.value)}
+                                            className="w-full bg-gray-700 border-gray-600 rounded-lg pl-10 pr-4 py-2 focus:ring-2 focus:ring-blue-500 transition-all"
+                                            placeholder="Enter tournament name"
+                                            disabled={isEditing}
+                                        />
+                                    </div>
                                 </div>
-                                <div 
-                                    className="cursor-pointer" 
-                                    onClick={() => handleTournamentClick(tournament)}
-                                >
-                                    <h2 className="text-xl font-semibold">{tournament.name}</h2>
-                                    <h3 className="text-xl font-semibold">{tournament.description}</h3>
-                                    <p>Slots: {tournament.slots}</p>
-                                    <img src={tournament.thumbnail} alt="Tournament Thumbnail" className="mt-2 rounded-lg" style={{ maxWidth: '100%' }} />
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium">Tournament Type</label>
+                                    <div className="relative">
+                                        <Users className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                                        <select
+                                            value={type}
+                                            onChange={(e) => setType(e.target.value)}
+                                            className="w-full bg-gray-700 border-gray-600 rounded-lg pl-10 pr-4 py-2 focus:ring-2 focus:ring-blue-500 transition-all appearance-none"
+                                        >
+                                            <option value="">Select Type</option>
+                                            <option value="1v1">1v1</option>
+                                            <option value="2v2">2v2</option>
+                                            <option value="3v3">3v3</option>
+                                        </select>
+                                        <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium">Description</label>
+                                    <div className="relative">
+                                        <AlertCircle className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                                        <input
+                                            type="text"
+                                            value={description}
+                                            onChange={(e) => setDescription(e.target.value)}
+                                            className="w-full bg-gray-700 border-gray-600 rounded-lg pl-10 pr-4 py-2 focus:ring-2 focus:ring-blue-500 transition-all"
+                                            placeholder="Tournament description"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium">Thumbnail URL</label>
+                                    <div className="relative">
+                                        <Image className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                                        <input
+                                            type="text"
+                                            value={thumbnailURL}
+                                            onChange={(e) => setThumbnailURL(e.target.value)}
+                                            className="w-full bg-gray-700 border-gray-600 rounded-lg pl-10 pr-4 py-2 focus:ring-2 focus:ring-blue-500 transition-all"
+                                            placeholder="Image URL"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium">Slots</label>
+                                    <div className="relative">
+                                        <Users className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                                        <input
+                                            type="number"
+                                            value={slots}
+                                            onChange={(e) => setSlots(e.target.value)}
+                                            className="w-full bg-gray-700 border-gray-600 rounded-lg pl-10 pr-4 py-2 focus:ring-2 focus:ring-blue-500 transition-all"
+                                            placeholder="Available slots"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium">Discord Link</label>
+                                    <div className="relative">
+                                        <LinkIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                                        <input
+                                            type="text"
+                                            value={discordlink}
+                                            onChange={(e) => setDiscordLink(e.target.value)}
+                                            className="w-full bg-gray-700 border-gray-600 rounded-lg pl-10 pr-4 py-2 focus:ring-2 focus:ring-blue-500 transition-all"
+                                            placeholder="Discord server URL"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            <button
+                                type="submit"
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors mt-6 flex items-center justify-center gap-2"
+                            >
+                                {isEditing ? <Edit className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
+                                {isEditing ? 'Update Tournament' : 'Create Tournament'}
+                            </button>
+                        </form>
+                    </div>
+                )}
+
+                {showTournamentList && !selectedTournament && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {tournaments.map(tournament => (
+                            <div key={tournament.id} className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden hover:border-blue-500 transition-all">
+                                <div className="p-4">
+                                    <div className="flex justify-end gap-2 mb-4">
+                                        <button
+                                            onClick={() => handleEditTournament(tournament)}
+                                            className="p-2 bg-blue-600 hover:bg-blue-700 rounded-full transition-colors"
+                                        >
+                                            <Edit size={16} />
+                                        </button>
+                                        <button
+                                            onClick={() => handleDeleteTournament(tournament.id)}
+                                            className="p-2 bg-red-600 hover:bg-red-700 rounded-full transition-colors"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </div>
+                                    <div 
+                                        className="cursor-pointer" 
+                                        onClick={() => handleTournamentClick(tournament)}
+                                    >
+                                        <img 
+                                            src={tournament.thumbnail} 
+                                            alt={tournament.name}
+                                            className="w-full h-48 object-cover rounded-lg mb-4"
+                                        />
+                                        <h3 className="text-xl font-semibold mb-2">{tournament.name}</h3>
+                                        <p className="text-gray-300 mb-2">{tournament.description}</p>
+                                        <div className="flex items-center gap-2 text-gray-400">
+                                            <Users size={16} />
+                                            <span>Slots: {tournament.slots}</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         ))}
                     </div>
                 )}
+
                 {selectedTournament && (
-                    <div className="mt-8 bg-gray-800 p-4 rounded-lg">
-                        <h3 className="text-xl font-semibold">{selectedTournament.description}</h3>
-                        <p>Slots: {selectedTournament.slots}</p>
-                        <img src={selectedTournament.thumbnail} alt="Tournament Thumbnail" className="mt-2 rounded-lg" style={{ maxWidth: '100%' }} />
-                        <div className="mt-4">
-                            {teams[selectedTournament.id]?.map(team => (
-                                <details key={team.id} className="mb-4 bg-gray-700 p-4 rounded-lg">
-                                    <summary className="cursor-pointer text-lg font-semibold">{team.TeamName}</summary>
-                                    {renderTeamPlayers(team)}
-                                </details>
-                            ))}
+                    <div className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+                        <div className="p-6">
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-2xl font-bold">{selectedTournament.name}</h2>
+                                <button 
+                                    onClick={() => setSelectedTournament(null)}
+                                    className="p-2 hover:bg-gray-700 rounded-full transition-colors"
+                                >
+                                    <X size={20} />
+                                </button>
+                            </div>
+                            <img 
+                                src={selectedTournament.thumbnail} 
+                                alt={selectedTournament.name}
+                                className="w-full h-64 object-cover rounded-lg mb-6"
+                            />
+                            <div className="space-y-4">
+                                {teams[selectedTournament.id]?.map(team => (
+                                    <details 
+                                        key={team.id} 
+                                        className="bg-gray-700 rounded-lg transition-all group"
+                                    >
+                                        <summary className="p-4 cursor-pointer font-medium hover:bg-gray-600 rounded-lg transition-colors flex items-center justify-between">
+                                            <span>{team.TeamName}</span>
+                                            <ChevronDown className="h-5 w-5 transform group-open:rotate-180 transition-transform" />
+                                        </summary>
+                                        <div className="p-4 space-y-3 border-t border-gray-600">
+                                            {renderTeamPlayers(team)}
+                                        </div>
+                                    </details>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 )}

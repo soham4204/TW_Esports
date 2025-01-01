@@ -23,20 +23,41 @@ const ForgotPasswordComponent = () => {
     };
 
     return (
-        <div className="flex flex-col overflow-auto items-center justify-center h-screen bg-gray-900 text-white">
-            <div className="text-center h-full">
-                <div className="w-full flex justify-center mt-6">
-                    <img src={logo} alt="TW Esports Logo" className="flex h-24 mb-8" />
+        <div className="h-screen w-full bg-slate-900 text-white">
+            <div className="p-6 max-w-3xl mx-auto">
+                <div className="border rounded-lg shadow-md bg-slate-900">
+                    <div className="p-8 text-center">
+                        <img src={logo} alt="TW Esports Logo" className="h-32 mx-auto mb-6" />
+                        <h1 className="text-3xl font-bold mb-6">Forgot Password</h1>
+                        <form onSubmit={handleResetPassword} className="space-y-6">
+                            <input 
+                                type="email" 
+                                placeholder="Email" 
+                                value={email} 
+                                onChange={(e) => setEmail(e.target.value)} 
+                                required 
+                                className="bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 w-full focus:outline-none focus:border-blue-500"
+                            />
+                            <button 
+                                type="submit" 
+                                disabled={loading} 
+                                className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-semibold"
+                            >
+                                {loading ? 'Sending...' : 'Reset Password'}
+                            </button>
+                            {error && (
+                                <p className="text-red-500 mt-4">
+                                    {error}
+                                </p>
+                            )}
+                            {message && (
+                                <p className="text-green-500 mt-4">
+                                    {message}
+                                </p>
+                            )}
+                        </form>
+                    </div>
                 </div>
-                <h1 className="mt-2 text-3xl font-bold">Forgot Password</h1>
-                <form className="mt-8 flex flex-col justify-center" onSubmit={handleResetPassword}>
-                    <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 mb-4 focus:outline-none focus:border-blue-500" />
-                    <button type="submit" disabled={loading} className="ml-4 bg-blue-500 text-white px-8 py-3 rounded-lg text-lg font-semibold m-4">
-                        {loading ? 'Sending...' : 'Reset Password'}
-                    </button>
-                    {error && <p className="text-red-500">{error}</p>}
-                    {message && <p className="text-green-500">{message}</p>}
-                </form>
             </div>
         </div>
     );

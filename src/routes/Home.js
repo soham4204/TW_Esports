@@ -37,8 +37,8 @@ const HomeComponent = () => {
 
     return (
         <div className="flex flex-col h-screen overflow-auto bg-gray-900 text-white">
-            <Navbar />
-            <div className="flex-grow p-4">
+            <Navbar/>
+            <div className="flex-grow p-4 mt-4">
                 {tournaments.map((tournament) => (
                     <div key={tournament.id} className="w-full px-4">
                         <TournamentCard tournament={tournament} />

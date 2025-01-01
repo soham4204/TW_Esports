@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase-config';
 import Navbar from '../components/Navbar';
+import { Trophy } from 'lucide-react';
 
 const MyTournaments = () => {
     const [tournaments, setTournaments] = useState([]);
@@ -13,7 +14,7 @@ const MyTournaments = () => {
                 setUser(user);
             } else {
                 setUser(null);
-                setLoading(false); 
+                setLoading(false);
             }
         });
 
@@ -23,9 +24,7 @@ const MyTournaments = () => {
     useEffect(() => {
         const fetchMyTournaments = async () => {
             try {
-                if (!user) {
-                    throw new Error('User not authenticated');
-                }
+                if (!user) return;
 
                 const userDoc = await db.collection('users').doc(user.uid).get();
                 if (!userDoc.exists) {
@@ -36,30 +35,31 @@ const MyTournaments = () => {
                 const userData = userDoc.data();
                 const tournamentRefs = userData.registeredTournaments || [];
 
-                const tournamentPromises = tournamentRefs.map(tournamentRef => tournamentRef.get());
-                const tournamentSnapshots = await Promise.all(tournamentPromises);
+                const tournamentSnapshots = await Promise.all(
+                    tournamentRefs.map((tournamentRef) => tournamentRef.get())
+                );
 
-                const tournamentsData = tournamentSnapshots.map(snapshot => ({
-                    id: snapshot.id,
-                    ...snapshot.data(),
-                }));
+                const tournamentsData = tournamentSnapshots
+                    .filter(snapshot => snapshot.exists)
+                    .map(snapshot => ({
+                        id: snapshot.id,
+                        ...snapshot.data(),
+                    }));
 
                 setTournaments(tournamentsData);
-                setLoading(false);
             } catch (error) {
                 console.error('Error fetching user tournaments: ', error);
+            } finally {
                 setLoading(false);
             }
         };
 
-        if (user) {
-            fetchMyTournaments();
-        }
+        if (user) fetchMyTournaments();
     }, [user]);
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center h-screen bg-gray-900 text-white">
+            <div className="flex items-center justify-center h-screen bg-slate-900 text-white">
                 <div className="text-center">
                     <svg className="animate-spin h-10 w-10 text-blue-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -72,23 +72,39 @@ const MyTournaments = () => {
     }
 
     return (
-        <div className="flex flex-col h-screen overflow-auto bg-gray-900 text-white">
+        <div className="h-screen w-full overflow-auto bg-slate-900">
             <Navbar />
-            <div className="flex flex-col justify-center p-4">
-                <h1 className="text-2xl font-bold text-center mb-4">My Tournaments</h1>
-                {tournaments.length > 0 ? (
-                    tournaments.map(tournament => (
-                        <div key={tournament.id} className="w-full px-4 py-2 bg-slate-800 mb-4 rounded-lg">
-                            <img src={tournament.thumbnail} alt={tournament.name} className="w-full h-48 object-cover rounded-lg" />
-                            <h1 className="text-2xl font-bold">{tournament.name}</h1>
-                            <h2 className="text-xl font-semibold">{tournament.description}</h2>
-                            <p>Slots: {tournament.slots}</p>
-                            <p>Registered Teams: {tournament.registeredTeams}</p>
+            <div className="p-6 max-w-4xl mx-auto">
+                <div className="border border-slate-400 rounded-lg shadow-md bg-slate-900 text-white">
+                    <div className="p-4 border-b border-slate-700">
+                        <div className="flex items-center gap-2">
+                            <Trophy className="h-6 w-6 text-blue-400" />
+                            <h2 className="text-lg font-semibold">My Tournaments</h2>
                         </div>
-                    ))
-                ) : (
-                    <p className="text-center">You have not registered for any tournaments yet.</p>
-                )}
+                    </div>
+                    <div className="p-4 space-y-4">
+                        {tournaments.length > 0 ? (
+                            tournaments.map((tournament) => (
+                                <div key={tournament.id} className="p-4 bg-slate-800 rounded-lg">
+                                    <img
+                                        src={tournament.thumbnail}
+                                        alt={tournament.name}
+                                        className="w-full h-48 object-cover rounded-lg mb-4"
+                                    />
+                                    <h1 className="text-2xl font-bold">{tournament.name}</h1>
+                                    <p className="text-lg">{tournament.description}</p>
+                                    <p className="mt-2">Slots: {tournament.slots}</p>
+                                    <p>Registered Teams: {tournament.registeredTeams}</p>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="text-center p-6 bg-slate-800 rounded-lg ">
+                                <Trophy className="h-12 w-12 mx-auto text-blue-400" />
+                                <p className="mt-4 text-lg font-medium">No tournaments joined yet.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     );
