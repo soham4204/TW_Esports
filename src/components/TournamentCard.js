@@ -15,6 +15,8 @@ const TournamentCard = ({ tournament }) => {
     const [registeredTeams, setRegisteredTeams] = useState(tournament.registeredTeams);
     const [isAlreadyRegistered, setIsAlreadyRegistered] = useState(false);
     const [justRegistered, setJustRegistered] = useState(false);
+    const [showAd, setShowAd] = useState(true); // State to control the ad visibility
+    const [timeLeft, setTimeLeft] = useState(5);
 
     useEffect(() => {
         const unsubscribe = db.collection('tournaments').doc(tournament.id).collection('teams')
@@ -24,6 +26,20 @@ const TournamentCard = ({ tournament }) => {
 
         return () => unsubscribe();
     }, [tournament.id]);
+
+    useEffect(() => {
+        if (showAd && timeLeft > 0) {
+            const timer = setTimeout(() => {
+                setTimeLeft((prev) => prev - 1);
+            }, 1000);
+
+            return () => clearTimeout(timer); // Clear the timeout when the component unmounts or timeLeft changes
+        }
+
+        if (timeLeft === 0) {
+            setShowAd(false); // Hide the ad after 5 seconds
+        }
+    }, [showAd, timeLeft]);
 
     useEffect(() => {
         const checkIfRegistered = async () => {
@@ -264,11 +280,42 @@ const TournamentCard = ({ tournament }) => {
             )}
             {successMessage && (
                 <div className="mt-2">
-                    <p className="text-green-500">{successMessage}</p>
-                    <p>Join The Discord Server for Match Updates</p>
-                    <a href={tournament.discordlink} target="_blank" rel="noopener noreferrer" className="bg-blue-500 text-white px-4 py-2 rounded-lg mt-2 inline-block">
-                        Join 
-                    </a>
+                    {showAd ? (
+                        <div className="bg-gray-800 text-white p-4 rounded-lg text-center">
+                            <h2 className="text-xl font-bold">Wait for the Discord Link</h2>
+                            <p className="mt-2">The link will appear in {timeLeft} seconds...</p>
+                            {/* Google AdSense Content */}
+                            <div className="mt-4">
+                                <ins
+                                    className="adsbygoogle"
+                                    style={{ display: 'block' }}
+                                    data-ad-client="ca-pub-7312937286473322" // Replace with your AdSense client ID
+                                    data-ad-slot="3058069917" // Replace with your AdSense ad slot ID
+                                    data-ad-format="auto"
+                                    data-full-width-responsive="true"
+                                ></ins>
+                            </div>
+                            <button
+                                onClick={() => setShowAd(false)}
+                                className="mt-4 bg-blue-500 text-white px-4 py-2 rounded-lg"
+                            >
+                                Skip Ad
+                            </button>
+                        </div>
+                    ) : (
+                        <div>
+                            <p className="text-green-500">{successMessage}</p>
+                            <p>Join The Discord Server for Match Updates</p>
+                            <a
+                                href={tournament.discordlink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="bg-blue-500 text-white px-4 py-2 rounded-lg mt-2 inline-block"
+                            >
+                                Join
+                            </a>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

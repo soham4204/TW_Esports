@@ -2,6 +2,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import logo from '../assets/Logo.png';
+import AdComponent from '../components/AdComponent';
 
 const JoinUsPage = () => {
   return (
@@ -20,6 +21,7 @@ const JoinUsPage = () => {
         <p className="text-lg">Already have an account?</p>
         <Link to="/login" className="text-blue-500">Login here</Link>      
       </div>
+      <AdComponent adSlot={3058069917}/>
     </div>
   );
 };

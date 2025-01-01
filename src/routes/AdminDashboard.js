@@ -71,16 +71,36 @@ const AdminDashboard = () => {
     const handleDeleteTournament = async (tournamentId) => {
         if (window.confirm('Are you sure you want to delete this tournament?')) {
             try {
+                // Delete the tournament document
                 await db.collection('tournaments').doc(tournamentId).delete();
-                setSuccessMessage('Tournament deleted successfully');
+    
+                // Delete all teams associated with the tournament
+                const teamsSnapshot = await db
+                    .collection('teams')
+                    .where('tournamentId', '==', tournamentId)
+                    .get();
+    
+                const deleteTeamPromises = teamsSnapshot.docs.map((doc) => doc.ref.delete());
+                await Promise.all(deleteTeamPromises);
+    
+                // Optional: Delete the tournament ID from any other references
+                const referenceSnapshot = await db
+                    .collection('references')
+                    .where('tournamentId', '==', tournamentId)
+                    .get();
+    
+                const deleteReferencePromises = referenceSnapshot.docs.map((doc) => doc.ref.delete());
+                await Promise.all(deleteReferencePromises);
+    
+                setSuccessMessage('Tournament and associated data deleted successfully');
                 fetchTournaments();
                 setSelectedTournament(null);
             } catch (error) {
-                console.error('Error deleting tournament: ', error);
-                setSuccessMessage('Error deleting tournament');
+                console.error('Error deleting tournament and associated data: ', error);
+                setSuccessMessage('Error deleting tournament and associated data');
             }
         }
-    };
+    };    
 
     const handleSubmit = async (e) => {
         e.preventDefault();

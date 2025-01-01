@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import logo from '../assets/Logo.png';
 import { auth, db } from '../firebase-config';
 import BackButton from '../components/BackButton';
+import AdComponent from '../components/AdComponent';
 
 const ProfileComponent = () => {
     const [userData, setUserData] = useState(null);
@@ -59,6 +60,9 @@ const ProfileComponent = () => {
                         <p><strong>Brawl Stars ID:</strong> {userData.brawlstarsId}</p>
                     </div>
                 )}
+            </div>
+            <div>
+                <AdComponent adSlot={3058069917}/>
             </div>
         </div>
     );
