@@ -4,149 +4,197 @@ import firebase from 'firebase/compat/app';
 import { Trophy, Users, X, CheckCircle, AlertCircle } from 'lucide-react';
 
 const TournamentCard = ({ tournament }) => {
-    const [teamName, setTeamName] = useState('');
-    const [player1Id, setPlayer1Id] = useState('');
-    const [player1InGameName, setPlayer1InGameName] = useState('');
-    const [player2Id, setPlayer2Id] = useState('');
-    const [player2InGameName, setPlayer2InGameName] = useState('');
-    const [player3Id, setPlayer3Id] = useState('');
-    const [player3InGameName, setPlayer3InGameName] = useState('');
+    const [formData, setFormData] = useState({
+        teamName: '',
+        player1: { id: '', inGameName: '' },
+        player2: { id: '', inGameName: '' },
+        player3: { id: '', inGameName: '' }
+    });
     const [successMessage, setSuccessMessage] = useState('');
+    const [errorMessage, setErrorMessage] = useState('');
     const [showRegistrationForm, setShowRegistrationForm] = useState(false);
-    const [registeredTeams, setRegisteredTeams] = useState(tournament.registeredTeams);
+    const [registeredTeams, setRegisteredTeams] = useState(tournament?.registeredTeams || 0);
     const [isAlreadyRegistered, setIsAlreadyRegistered] = useState(false);
     const [justRegistered, setJustRegistered] = useState(false);
-    const [showAd, setShowAd] = useState(true);
+    const [showAd, setShowAd] = useState(false);
     const [timeLeft, setTimeLeft] = useState(5);
 
     useEffect(() => {
-        const unsubscribe = db.collection('tournaments').doc(tournament.id).collection('teams')
-            .onSnapshot(snapshot => {
-                setRegisteredTeams(snapshot.size);
-            });
+        if (!tournament?.id) return;
+
+        const unsubscribe = db.collection('tournaments')
+            .doc(tournament.id)
+            .collection('teams')
+            .onSnapshot(
+                snapshot => {
+                    setRegisteredTeams(snapshot.size);
+                },
+                error => {
+                    console.error('Error fetching teams:', error);
+                    setErrorMessage('Error loading tournament data');
+                }
+            );
 
         return () => unsubscribe();
-    }, [tournament.id]);
+    }, [tournament?.id]);
 
     useEffect(() => {
-        if (showAd && timeLeft > 0) {
-            const timer = setTimeout(() => {
-                setTimeLeft((prev) => prev - 1);
-            }, 1000);
-
-            return () => clearTimeout(timer); // Clear the timeout when the component unmounts or timeLeft changes
-        }
-
-        if (timeLeft === 0) {
-            setShowAd(false); // Hide the ad after 5 seconds
-        }
-    }, [showAd, timeLeft]);
-
-    useEffect(() => {
-        const checkIfRegistered = async () => {
+        const checkRegistration = async () => {
             const user = auth.currentUser;
-            if (user) {
+            if (!user || !tournament?.id) return;
+
+            try {
                 const userDoc = await db.collection('users').doc(user.uid).get();
                 const userData = userDoc.data();
-                if (userData && userData.registeredTournaments) {
+                if (userData?.registeredTournaments) {
                     const registeredTournaments = userData.registeredTournaments.map(ref => ref.id);
                     setIsAlreadyRegistered(registeredTournaments.includes(tournament.id));
                 }
+            } catch (error) {
+                console.error('Error checking registration:', error);
+                setErrorMessage('Error checking registration status');
             }
         };
 
-        checkIfRegistered();
-    }, [tournament.id]);
+        checkRegistration();
+    }, [tournament?.id]);
+
+    useEffect(() => {
+        if (showAd && timeLeft > 0) {
+            const timer = setInterval(() => {
+                setTimeLeft((prevTime) => prevTime - 1);
+            }, 1000);
+
+            return () => clearInterval(timer);
+        }
+        
+        if (timeLeft === 0) {
+            setShowAd(false);
+            setTimeLeft(5); // Reset timer for next use
+        }
+    }, [showAd, timeLeft]);
+
+    const handleInputChange = (field, value, playerNum = null) => {
+        if (playerNum) {
+            setFormData(prev => ({
+                ...prev,
+                [`player${playerNum}`]: {
+                    ...prev[`player${playerNum}`],
+                    [field]: value
+                }
+            }));
+        } else {
+            setFormData(prev => ({
+                ...prev,
+                [field]: value
+            }));
+        }
+    };
+
+    const validatePlayerIds = (ids) => {
+        return ids.every(id => {
+            if (!id) return true; // Skip empty optional fields
+            const formattedId = id.startsWith('#') ? id : `#${id}`;
+            return formattedId.length === 10;
+        });
+    };
 
     const handleRegister = async (e) => {
         e.preventDefault();
-        if (isAlreadyRegistered) {
-            setSuccessMessage('You have already registered for this tournament.');
-            return;
-        }
+        setErrorMessage('');
+        setSuccessMessage('');
 
         try {
-            if (tournament.type !== '1v1' && !teamName.trim()) {
-                throw new Error('Team Name cannot be empty');
-            }
-
             const user = auth.currentUser;
             if (!user) {
-                throw new Error('User not authenticated');
-            }
-            const formatPlayerId = (id) => {
-                if (!id.startsWith('#')) {
-                    id = `#${id}`;
-                }
-                if (id.length !== 10) {
-                    throw new Error('Player ID must be 10 characters long, including #');
-                }
-                return id;
-            };
-
-            const player1IdFormatted = formatPlayerId(player1Id);
-            const player2IdFormatted = tournament.type === '2v2' || tournament.type === '3v3' ? formatPlayerId(player2Id) : '';
-            const player3IdFormatted = tournament.type === '3v3' ? formatPlayerId(player3Id) : '';
-
-            const newPlayerIds = [player1IdFormatted];
-            if (tournament.type === '2v2' || tournament.type === '3v3') newPlayerIds.push(player2IdFormatted);
-            if (tournament.type === '3v3') newPlayerIds.push(player3IdFormatted);
-
-            const tournamentCollectionRef = db.collection('tournaments').doc(tournament.id).collection('teams');
-            const snapshot = await tournamentCollectionRef.get();
-            const existingPlayerIds = [];
-
-            snapshot.forEach(doc => {
-                const teamData = doc.data();
-                existingPlayerIds.push(teamData.player1Id);
-                if (teamData.player2Id) existingPlayerIds.push(teamData.player2Id);
-                if (teamData.player3Id) existingPlayerIds.push(teamData.player3Id);
-            });
-
-            // Check for duplicates
-            const duplicateIds = newPlayerIds.filter(id => existingPlayerIds.includes(id));
-            if (duplicateIds.length > 0) {
-                throw new Error(`Player ID(s) ${duplicateIds.join(', ')} already registered in this tournament.`);
+                throw new Error('Please sign in to register');
             }
 
-            await tournamentCollectionRef.add({
-                TeamName: teamName,
-                player1Id: player1IdFormatted,
-                player1InGameName,
-                player2Id: player2IdFormatted,
-                player2InGameName,
-                player3Id: player3IdFormatted,
-                player3InGameName,
+            if (isAlreadyRegistered) {
+                throw new Error('You have already registered for this tournament');
+            }
+
+            // Validate team name for team tournaments
+            if (tournament.type !== '1v1' && !formData.teamName.trim()) {
+                throw new Error('Team name is required');
+            }
+
+            // Format and validate player IDs
+            const playerIds = [
+                formData.player1.id,
+                tournament.type !== '1v1' ? formData.player2.id : null,
+                tournament.type === '3v3' ? formData.player3.id : null
+            ].filter(Boolean);
+
+            if (!validatePlayerIds(playerIds)) {
+                throw new Error('Invalid player ID format. Must be 9 characters with optional #');
+            }
+
+            // Check for duplicate registrations
+            const teamsSnapshot = await db.collection('tournaments')
+                .doc(tournament.id)
+                .collection('teams')
+                .get();
+
+            const existingIds = new Set();
+            teamsSnapshot.forEach(doc => {
+                const team = doc.data();
+                Object.keys(team).forEach(key => {
+                    if (key.includes('Id')) existingIds.add(team[key]);
+                });
             });
-            const userDocRef = db.collection('users').doc(user.uid);
-            await userDocRef.update({
+
+            const duplicateId = playerIds.find(id => existingIds.has(id.startsWith('#') ? id : `#${id}`));
+            if (duplicateId) {
+                throw new Error(`Player ID ${duplicateId} is already registered`);
+            }
+
+            // Create team registration
+            await db.collection('tournaments')
+                .doc(tournament.id)
+                .collection('teams')
+                .add({
+                    teamName: formData.teamName,
+                    player1Id: formData.player1.id.startsWith('#') ? formData.player1.id : `#${formData.player1.id}`,
+                    player1InGameName: formData.player1.inGameName,
+                    ...(tournament.type !== '1v1' && {
+                        player2Id: formData.player2.id.startsWith('#') ? formData.player2.id : `#${formData.player2.id}`,
+                        player2InGameName: formData.player2.inGameName,
+                    }),
+                    ...(tournament.type === '3v3' && {
+                        player3Id: formData.player3.id.startsWith('#') ? formData.player3.id : `#${formData.player3.id}`,
+                        player3InGameName: formData.player3.inGameName,
+                    }),
+                    userId: user.uid,
+                    registeredAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+            // Update user's registered tournaments
+            await db.collection('users').doc(user.uid).update({
                 registeredTournaments: firebase.firestore.FieldValue.arrayUnion(db.doc(`tournaments/${tournament.id}`))
             });
 
-            setTeamName('');
-            setPlayer1Id('');
-            setPlayer1InGameName('');
-            setPlayer2Id('');
-            setPlayer2InGameName('');
-            setPlayer3Id('');
-            setPlayer3InGameName('');
             setSuccessMessage('Team registered successfully');
-            setIsAlreadyRegistered(true); // Set the user as registered after successful registration
+            setIsAlreadyRegistered(true);
             setJustRegistered(true);
             setShowRegistrationForm(false);
+            setShowAd(true);
+            setTimeLeft(5);
+            setFormData({
+                teamName: '',
+                player1: { id: '', inGameName: '' },
+                player2: { id: '', inGameName: '' },
+                player3: { id: '', inGameName: '' }
+            });
+
         } catch (error) {
-            console.error('Error registering team: ', error);
-            setSuccessMessage(error.message);
+            console.error('Registration error:', error);
+            setErrorMessage(error.message);
         }
     };
 
-    const handleRegisterClick = () => {
-        setShowRegistrationForm(!showRegistrationForm);
-        setJustRegistered(false); 
-    };
-
-    const remainingSlots = tournament.slots - registeredTeams;
-    const filledSlotsPercentage = (registeredTeams / tournament.slots) * 100;
+    const remainingSlots = tournament?.slots ? tournament.slots - registeredTeams : 0;
+    const filledSlotsPercentage = tournament?.slots ? (registeredTeams / tournament.slots) * 100 : 0;
 
     return (
         <div className="max-w-4xl mx-auto bg-slate-900 rounded-lg border border-slate-400 overflow-hidden shadow-xl">
@@ -186,6 +234,14 @@ const TournamentCard = ({ tournament }) => {
                         </div>
                     </div>
 
+                    {/* Error Message */}
+                    {errorMessage && (
+                        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 text-center">
+                            <AlertCircle className="w-6 h-6 text-red-400 mx-auto mb-2" />
+                            <p className="text-red-400">{errorMessage}</p>
+                        </div>
+                    )}
+
                     {/* Registration Section */}
                     {remainingSlots === 0 ? (
                         <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 text-center">
@@ -213,33 +269,64 @@ const TournamentCard = ({ tournament }) => {
 
                             {showRegistrationForm && (
                                 isAlreadyRegistered && !justRegistered ? (
-                                    <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 text-center">
-                                        <AlertCircle className="w-6 h-6 text-yellow-400 mx-auto mb-2" />
-                                        <p className="text-yellow-400 font-semibold">You have already registered for this tournament.</p>
+                                    // Show "already registered" message if user is registered but didn't just register
+                                    <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 text-center">
+                                        <AlertCircle className="w-6 h-6 text-blue-400 mx-auto mb-2" />
+                                        <p className="text-blue-400 font-semibold">
+                                            You have already registered for this tournament.
+                                        </p>
                                     </div>
                                 ) : (
-                                    <form onSubmit={handleRegister} className="space-y-4">
-                                        {tournament.type !== '1v1' && (
-                                            <div>
-                                                <label className="block text-sm font-medium text-slate-300 mb-1">Team Name</label>
-                                                <input
-                                                    type="text"
-                                                    value={teamName}
-                                                    onChange={(e) => setTeamName(e.target.value)}
-                                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                    required
-                                                />
-                                            </div>
-                                        )}
+                                <form onSubmit={handleRegister} className="space-y-4">
+                                    {tournament.type !== '1v1' && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Team Name</label>
+                                            <input
+                                                type="text"
+                                                value={formData.teamName}
+                                                onChange={(e) => handleInputChange('teamName', e.target.value)}
+                                                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                required
+                                            />
+                                        </div>
+                                    )}
 
-                                        {/* Player 1 Fields */}
+                                    {/* Player 1 Fields */}
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Player 1 ID</label>
+                                            <input
+                                                type="text"
+                                                value={formData.player1.id}
+                                                onChange={(e) => handleInputChange('id', e.target.value, 1)}
+                                                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                required
+                                                minLength="9"
+                                                maxLength="10"
+                                                pattern="#?.{9}"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-300 mb-1">Player 1 In-Game Name</label>
+                                            <input
+                                                type="text"
+                                                value={formData.player1.inGameName}
+                                                onChange={(e) => handleInputChange('inGameName', e.target.value, 1)}
+                                                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Player 2 Fields */}
+                                    {(tournament.type === '2v2' || tournament.type === '3v3') && (
                                         <div className="space-y-4">
                                             <div>
-                                                <label className="block text-sm font-medium text-slate-300 mb-1">Player 1 ID</label>
+                                                <label className="block text-sm font-medium text-slate-300 mb-1">Player 2 ID</label>
                                                 <input
                                                     type="text"
-                                                    value={player1Id}
-                                                    onChange={(e) => setPlayer1Id(e.target.value)}
+                                                    value={formData.player2.id}
+                                                    onChange={(e) => handleInputChange('id', e.target.value, 2)}
                                                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                                     required
                                                     minLength="9"
@@ -248,87 +335,55 @@ const TournamentCard = ({ tournament }) => {
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-sm font-medium text-slate-300 mb-1">Player 1 In-Game Name</label>
+                                                <label className="block text-sm font-medium text-slate-300 mb-1">Player 2 In-Game Name</label>
                                                 <input
                                                     type="text"
-                                                    value={player1InGameName}
-                                                    onChange={(e) => setPlayer1InGameName(e.target.value)}
+                                                    value={formData.player2.inGameName}
+                                                    onChange={(e) => handleInputChange('inGameName', e.target.value, 2)}
                                                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                                     required
                                                 />
                                             </div>
                                         </div>
+                                    )}
 
-                                        {(tournament.type === '2v2' || tournament.type === '3v3') && (
-                                            <>
-                                                <div className="mb-4">
-                                                    <label htmlFor="player2Id" className="block text-sm font-medium text-gray-300">Player 2 ID</label>
-                                                    <input
-                                                        type="text"
-                                                        id="player2Id"
-                                                        value={player2Id}
-                                                        onChange={(e) => setPlayer2Id(e.target.value)}
-                                                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500"
-                                                        required
-                                                        minLength="9"
-                                                        maxLength="10"
-                                                        pattern="#?.{9}"
-                                                        title="ID must be 9 characters long (excluding # if included)."
-                                                    />
-                                                </div>
-                                                <div className="mb-4">
-                                                    <label htmlFor="player2InGameName" className="block text-sm font-medium text-gray-300">Player 2 In-Game Name</label>
-                                                    <input
-                                                        type="text"
-                                                        id="player2InGameName"
-                                                        value={player2InGameName}
-                                                        onChange={(e) => setPlayer2InGameName(e.target.value)}
-                                                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500"
-                                                        required
-                                                    />
-                                                </div>
-                                            </>
-                                        )}
-                                        {tournament.type === '3v3' && (
-                                            <>
-                                                <div className="mb-4">
-                                                    <label htmlFor="player3Id" className="block text-sm font-medium text-gray-300">Player 3 ID</label>
-                                                    <input
-                                                        type="text"
-                                                        id="player3Id"
-                                                        value={player3Id}
-                                                        onChange={(e) => setPlayer3Id(e.target.value)}
-                                                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500"
-                                                        required
-                                                        minLength="9"
-                                                        maxLength="10"
-                                                        pattern="#?.{9}"
-                                                        title="ID must be 9 characters long (excluding # if included)."
-                                                    />
-                                                </div>
-                                                <div className="mb-4">
-                                                    <label htmlFor="player3InGameName" className="block text-sm font-medium text-gray-300">Player 3 In-Game Name</label>
-                                                    <input
-                                                        type="text"
-                                                        id="player3InGameName"
-                                                        value={player3InGameName}
-                                                        onChange={(e) => setPlayer3InGameName(e.target.value)}
-                                                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500"
-                                                        required
-                                                    />
-                                                </div>
-                                            </>
-                                        )}
+                                    {/* Player 3 Fields */}
+                                    {tournament.type === '3v3' && (
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-300 mb-1">Player 3 ID</label>
+                                                <input
+                                                    type="text"
+                                                    value={formData.player3.id}
+                                                    onChange={(e) => handleInputChange('id', e.target.value, 3)}
+                                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                    required
+                                                    minLength="9"
+                                                    maxLength="10"
+                                                    pattern="#?.{9}"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-300 mb-1">Player 3 In-Game Name</label>
+                                                <input
+                                                    type="text"
+                                                    value={formData.player3.inGameName}
+                                                    onChange={(e) => handleInputChange('inGameName', e.target.value, 3)}
+                                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                    required
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
 
-                                        <button 
-                                            type="submit"
-                                            onClick={handleRegisterClick}
-                                            className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2"
-                                        >
-                                            <CheckCircle className="w-5 h-5" />
-                                            Submit Registration
-                                        </button>
-                                    </form>
+                                    <button 
+                                        type="submit"
+                                        className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <CheckCircle className="w-5 h-5" />
+                                        Submit Registration
+                                    </button>
+                                </form>
                                 )
                             )}
                         </div>
@@ -341,16 +396,6 @@ const TournamentCard = ({ tournament }) => {
                                 <div className="bg-slate-800 rounded-lg p-6 text-center">
                                     <h2 className="text-xl font-bold text-white mb-2">Wait for the Discord Link</h2>
                                     <p className="text-slate-400 mb-4">The link will appear in {timeLeft} seconds...</p>
-                                    <div className="my-4">
-                                        <ins
-                                            className="adsbygoogle"
-                                            style={{ display: 'block' }}
-                                            data-ad-client="ca-pub-7312937286473322"
-                                            data-ad-slot="3058069917"
-                                            data-ad-format="auto"
-                                            data-full-width-responsive="true"
-                                        ></ins>
-                                    </div>
                                     <button
                                         onClick={() => setShowAd(false)}
                                         className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
