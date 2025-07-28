@@ -1,29 +1,42 @@
-Live link - https://tw-esports.vercel.app/
+# 🎮 TW Esports
 
-TW Esports:-
-A dynamic platform that allows users to participate in mobile gaming tournaments. Players can compete in various mobile games, check live tournament updates, and interact with a growing community of gamers.
+**Live Link:** [https://tw-esports.vercel.app/](https://tw-esports.vercel.app/)
 
-Features
-Join Tournaments: Gamers can search for tournaments and participate in any ongoing competitions.
-Leaderboard and Rankings: Real-time tracking of players' rankings and tournament performance with live leaderboards.
-Tournament Types: Support for different tournament formats like knockouts, round-robin.
-User Profiles: Gamers can manage their profiles, view tournament history, and track their stats.
-Multi-platform: Optimized for mobile devices and web browsers for easy access on the go.
+TW Esports is a dynamic and competitive platform for mobile gamers to join, track, and participate in esports tournaments. It brings together players from various games into a single platform with live updates, real-time rankings, and community engagement.
 
-Tech Stack
-Frontend:
-React (Web)
-Tailwind CSS (for styling)
-Backend:
-Node.js
-Express.js
-Database:
-Firebase (for storing users, tournaments, and game data)
-Authentication:
-Firebase for user authentication
+---
 
-Contact
-If you have any questions or feedback, feel free to reach out:
+## 🚀 Features
 
-Email: psoham104@gmail.com
-GitHub: Soham4204
+- ✅ **Join Tournaments**  
+  Search and register for active mobile gaming tournaments easily.
+
+- 📊 **Leaderboard and Rankings**  
+  Real-time leaderboards to track player rankings and performance across tournaments.
+
+- 🎯 **Multiple Tournament Types**  
+  Supports knockout, round-robin, and other popular tournament formats.
+
+- 👤 **User Profiles**  
+  Personalized profiles with tournament history, stats, and achievements.
+
+- 📱 **Multi-Platform Support**  
+  Fully responsive and optimized for both mobile and web platforms.
+
+---
+
+## 🛠️ Tech Stack
+
+### 🔹 Frontend
+- React.js
+- Tailwind CSS
+
+### 🔸 Backend
+- Node.js
+- Express.js
+
+### 🔸 Database & Auth
+- Firebase Firestore
+- Firebase Authentication
+
+---
