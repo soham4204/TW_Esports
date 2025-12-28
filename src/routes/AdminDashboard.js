@@ -48,10 +48,10 @@ const AdminDashboard = () => {
     const queryParams = new URLSearchParams(location.search);
     const secretKey = queryParams.get('key');
 
-    if (secretKey === 'R7Esports') {
+    if (secretKey && secretKey.toLowerCase() === 'r7esports') {
         // Perform a silent login so Firestore recognizes your permissions
         // You must have already created this user in the Firebase Auth console
-        auth.signInWithEmailAndPassword('twesports29@gmail.com', '12345678')
+        auth.signInWithEmailAndPassword('r7esports@gmail.com', '12345678')
             .then(() => {
                 setIsAuthorized(true);
                 fetchTournaments();
