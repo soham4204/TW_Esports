@@ -1,98 +1,81 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Trophy, Users, Gamepad2, Coins } from 'lucide-react';
+import { Trophy, Users, Zap, ShieldCheck } from 'lucide-react';
 import AdComponent from '../components/AdComponent';
+import Footer from '../components/Footer';
 
-const JoinUsPage = () => {
+const LandingPage = () => {
   const features = [
     {
-      icon: <Trophy className="w-8 h-8 text-yellow-400" />,
-      title: "Competitive Tournaments",
-      description: "Join daily tournaments and climb the ranks to win exclusive rewards"
+      icon: <Zap className="w-8 h-8 text-yellow-400" />,
+      title: "Instant Entry",
+      description: "No accounts. No passwords. Just enter your Game ID and start competing immediately."
     },
     {
-      icon: <Users className="w-8 h-8 text-blue-400" />,
-      title: "Team Formation",
-      description: "Find your perfect trio and dominate the arena together"
+      icon: <Trophy className="w-8 h-8 text-blue-400" />,
+      title: "Pro Tournaments",
+      description: "Join high-stakes Brawl Stars tournaments and win exclusive rewards."
     },
     {
-      icon: <Gamepad2 className="w-8 h-8 text-green-400" />,
-      title: "Custom Matches",
-      description: "Create and join custom games with your own rules"
+      icon: <Users className="w-8 h-8 text-green-400" />,
+      title: "Team Ready",
+      description: "Register your trio and track your progress across the platform."
     },
     {
-      icon: <Coins className="w-8 h-8 text-yellow-500" />,
-      title: "Rewards System",
-      description: "Earn points and exchange them for in-game items"
+      icon: <ShieldCheck className="w-8 h-8 text-purple-400" />,
+      title: "Verified Results",
+      description: "Live updates and fair play guaranteed by our active admin team."
     }
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-blue-900 text-white">
-      {/* Hero Section */}
+    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-blue-900 text-white font-poppins">
       <div className="max-w-6xl mx-auto px-4 pt-16 pb-8">
+        {/* Hero Section */}
         <div className="text-center space-y-6">
-          <h1 className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
-            TW Esports
+          <h1 className="text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 tracking-tight">
+            R7 ESPORTS
           </h1>
-          <p className="text-xl text-gray-300">Your Gateway to Professional Brawl Stars Gaming</p>
+          <p className="text-2xl text-gray-300 max-w-2xl mx-auto">
+            The fastest way to join professional Brawl Stars tournaments.
+          </p>
         </div>
 
-        {/* Main CTA */}
+        {/* Main CTA - No Login/Register */}
         <div className="mt-12 text-center">
-          <div className="space-y-4">
-            <button className="bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-4 rounded-lg text-lg font-bold transform transition-all hover:scale-105 hover:shadow-xl">
-              <Link to="/register">Start Your Journey</Link>
+          <Link to="/home">
+            <button className="bg-gradient-to-r from-blue-500 to-purple-600 px-12 py-5 rounded-full text-xl font-bold transform transition-all hover:scale-105 hover:shadow-[0_0_30px_rgba(59,130,246,0.5)]">
+              View Active Tournaments
             </button>
-            <p className="text-gray-400">
-              Already a member?{' '}
-              <Link to="/login" className="text-blue-400 hover:text-blue-300">
-                Sign in here
-              </Link>
-            </p>
-          </div>
+          </Link>
+          <p className="mt-4 text-gray-400 animate-pulse">
+            No registration required. Join in seconds.
+          </p>
         </div>
 
         {/* Features Grid */}
-        <div className="mt-20 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+        <div className="mt-24 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {features.map((feature, index) => (
-            <div key={index} className="bg-gray-800 bg-opacity-50 p-6 rounded-xl transform transition-all hover:scale-105">
+            <div key={index} className="bg-gray-800/40 backdrop-blur-md border border-gray-700/50 p-8 rounded-2xl transition-all hover:bg-gray-800/60">
               <div className="flex flex-col items-center text-center space-y-4">
-                <div className="p-3 bg-gray-700 rounded-full">
+                <div className="p-4 bg-gray-700/50 rounded-2xl">
                   {feature.icon}
                 </div>
-                <h3 className="text-xl font-semibold text-blue-300">{feature.title}</h3>
-                <p className="text-gray-400">{feature.description}</p>
+                <h3 className="text-xl font-bold text-white">{feature.title}</h3>
+                <p className="text-gray-400 leading-relaxed">{feature.description}</p>
               </div>
             </div>
           ))}
         </div>
 
-        {/* Game Stats */}
-        <div className="mt-20 bg-gray-800 bg-opacity-50 rounded-xl p-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
-            <div className="space-y-2">
-              <p className="text-4xl font-bold text-blue-400">100+</p>
-              <p className="text-gray-400">Active Players</p>
-            </div>
-            <div className="space-y-2">
-              <p className="text-4xl font-bold text-purple-400">Rs500+</p>
-              <p className="text-gray-400">Monthly Prize Pool</p>
-            </div>
-            <div className="space-y-2">
-              <p className="text-4xl font-bold text-green-400">24/7</p>
-              <p className="text-gray-400">Tournament Support</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Ad Section */}
-        <div className="mt-12">
+        {/* Ad Placement */}
+        <div className="mt-20 py-8 border-y border-gray-800">
           <AdComponent adSlot={3058069917}/>
         </div>
       </div>
+      <Footer />
     </div>
   );
 };
 
-export default JoinUsPage;
+export default LandingPage;

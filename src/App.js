@@ -1,29 +1,39 @@
-import {BrowserRouter, Route, Routes} from 'react-router-dom';
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import HomeComponent from './routes/Home';
-import LoginComponent from './routes/Login';
-import RegisterComponent from './routes/Register';
 import ContactUsComponent from './routes/ContactUs';
-import ProfileComponent from './routes/Profile';
 import LandingPageComponent from './routes/LandingPage';
-import ForgotPasswordComponent from './routes/ForgotPassword';
 import AdminDashboardComponent from './routes/AdminDashboard';
 import MyTournamentComponent from './routes/MyTournaments';
+import TournamentOverview from './routes/TournamentOverview';
+import AboutUs from './routes/AboutUs';
+import PrivacyPolicy from './routes/PrivacyPolicy';
+import Terms from './routes/Terms';
+import Disclaimer from './routes/Disclaimer';
+import Footer from './components/Footer';
 
 function App() {
   return (
     <div className="App h-screen font-poppins">
       <BrowserRouter>
         <Routes>
+          {/* Main User Flow */}
           <Route path="/" element={<LandingPageComponent />} />
-          <Route path="/register" element={<RegisterComponent />} />
-          <Route path="/login" element={<LoginComponent />} />
-          <Route path="/forgotpassword" element={<ForgotPasswordComponent />} />
-          <Route path="/contactus" element={<ContactUsComponent />} />
-          <Route path="/profile" element={<ProfileComponent />} />
           <Route path="/home" element={<HomeComponent />} />
-          <Route path="/admindashboard" element={<AdminDashboardComponent />} />         
           <Route path="/my-tournaments" element={<MyTournamentComponent />} />
+          <Route path="/contactus" element={<ContactUsComponent />} />
+          <Route path="/tournament/:id" element={<TournamentOverview />} />
+
+          {/* Secret Admin Route - Use a unique string here */}
+          <Route path="/admin" element={<AdminDashboardComponent />} />
+          <Route path="/about-us" element={<AboutUs />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/disclaimer" element={<Disclaimer />} />
+          
+          {/* Catch-all Redirect to Home */}
+          <Route path="*" element={<HomeComponent />} />
         </Routes>
+        <Footer />
       </BrowserRouter>
     </div>
   );
