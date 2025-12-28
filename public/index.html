@@ -1,22 +1,109 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
+    <script data-cfasync="false" src="https://cmp.gatekeeperconsent.com/min.js"></script>
+    <script data-cfasync="false" src="https://the.gatekeeperconsent.com/cmp.min.js"></script>
+
+    <script async src="//www.ezojs.com/ezoic/sa.min.js"></script>
+    <script>
+        window.ezstandalone = window.ezstandalone || {};
+        ezstandalone.cmd = ezstandalone.cmd || [];
+    </script>
+
     <meta charset="utf-8" />
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#000000" />
+    
     <meta
       name="description"
-      content="Web site created by soham parab using create-react-app"
+      content="R7 Esports: The ultimate gateway to professional Brawl Stars gaming. Join free tournaments, register your trio, and win exclusive rewards with no account required."
     />
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7312937286473322"
-     crossorigin="anonymous"></script>
+
+    <script>
+        window.addEventListener('load', function() {
+            // Add the 'loaded' class to the body to trigger the CSS transition
+            document.body.classList.add('loaded');
+            
+            // Optional: Remove the element completely after the fade-out
+            setTimeout(function() {
+                var loader = document.getElementById('loader-wrapper');
+                if(loader) loader.style.display = 'none';
+            }, 600);
+        });
+    </script>
      
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/apple-touch-icon.png" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     <title>R7 Esports</title>
+
+    <style>
+      #loader-wrapper {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          z-index: 10001; /* High z-index to stay on top */
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          background: #1a1a1a; /* Dark background matching esports themes */
+      }
+
+      /* The actual spinning element */
+      .loader {
+          display: block;
+          position: relative;
+          width: 150px;
+          height: 150px;
+          border-radius: 50%;
+          border: 3px solid transparent;
+          border-top-color: #3b82f6; /* Matching blue-500 from your theme */
+          animation: spin 2s linear infinite;
+          z-index: 1001;
+      }
+
+      .loader:before {
+          content: "";
+          position: absolute;
+          top: 5px; left: 5px; right: 5px; bottom: 5px;
+          border-radius: 50%;
+          border: 3px solid transparent;
+          border-top-color: #ffffff;
+          animation: spin 3s linear infinite;
+      }
+
+      .loading-text {
+          position: absolute;
+          bottom: 20%;
+          color: white;
+          font-family: 'Arial', sans-serif;
+          letter-spacing: 2px;
+          font-weight: bold;
+      }
+
+      @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+      }
+
+      /* Class to fade out the loader */
+      .loaded #loader-wrapper {
+          opacity: 0;
+          visibility: hidden;
+          transition: all 0.5s ease-out;
+      }
+    </style>
   </head>
   <body>
+    <div id="loader-wrapper">
+        <div class="loader"></div>
+        <div class="loader-section section-left"></div>
+        <div class="loader-section section-right"></div>
+        <p class="loading-text">R7 ESPORTS LOADING...</p>
+    </div>
+
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
   </body>
