@@ -146,36 +146,38 @@ const AdminDashboard = () => {
     };    
 
     const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!thumbnailURL) {
-            alert("Please upload a thumbnail first.");
-            return;
-        }
-        try {
-            const tournamentData = {
-                name: tournamentName,
-                description,
-                thumbnail: thumbnailURL,
-                slots,
-                discordlink,
-                type,
-            };
+    e.preventDefault();
+    if (!thumbnailURL) {
+        alert("Please upload a thumbnail first.");
+        return;
+    }
+    try {
+        const tournamentData = {
+            name: tournamentName,
+            description,
+            thumbnail: thumbnailURL,
+            slots: Number(slots), // FIX: Ensure this is a number for math
+            discordlink,
+            type,
+            createdAt: new Date() // Good practice for sorting
+        };
 
-            if (isEditing) {
-                await db.collection('tournaments').doc(editingId).update(tournamentData);
-                setSuccessMessage('Tournament updated successfully');
-            } else {
-                await db.collection('tournaments').doc(tournamentName).set(tournamentData);
-                setSuccessMessage('Tournament added successfully');
-            }
-
-            resetForm();
-            setShowForm(false);
-            fetchTournaments();
-        } catch (error) {
-            console.error('Error saving tournament: ', error);
+        if (isEditing) {
+            await db.collection('tournaments').doc(editingId).update(tournamentData);
+            setSuccessMessage('Tournament updated successfully');
+        } else {
+            // FIX: Use .add() to generate a unique ID and avoid "Zombie" data from old names
+            await db.collection('tournaments').add(tournamentData); 
+            setSuccessMessage('Tournament added successfully');
         }
-    };
+
+        resetForm();
+        setShowForm(false);
+        fetchTournaments();
+    } catch (error) {
+        console.error('Error saving tournament: ', error);
+    }
+};
 
     const fetchTeams = async (tournamentId) => {
         try {
@@ -254,7 +256,7 @@ const AdminDashboard = () => {
                                             onChange={(e) => setTournamentName(e.target.value)}
                                             className="w-full bg-gray-700 border-gray-600 rounded-lg pl-10 pr-4 py-2 focus:ring-2 focus:ring-blue-500"
                                             placeholder="Enter tournament name"
-                                            disabled={isEditing}
+                                            // disabled={isEditing}
                                             required
                                         />
                                     </div>

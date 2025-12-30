@@ -15,7 +15,6 @@ const HomeComponent = () => {
                 (snapshot) => {
                     const tournamentsData = snapshot.docs.map((doc) => ({
                         id: doc.id,
-                        name: doc.id, // Use document ID as the tournament name
                         ...doc.data(),
                     }));
                     setTournaments(tournamentsData);

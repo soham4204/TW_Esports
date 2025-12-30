@@ -17,6 +17,7 @@ const TournamentOverview = () => {
     const [showAd, setShowAd] = useState(false);
     const [timeLeft, setTimeLeft] = useState(5);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [userTeamName, setUserTeamName] = useState('');
 
     // Fetch Tournament Data
     useEffect(() => {
@@ -59,14 +60,14 @@ const TournamentOverview = () => {
 
     const handleRegister = async (e) => {
         e.preventDefault();
-        if (!tournament) return;
+        if (!tournament || !userTeamName) return;
         
         setIsSubmitting(true);
         setErrorMessage('');
         
         try {
             await db.collection('tournaments').doc(id).collection('teams').add({
-                teamName: tournament.name,
+                teamName: userTeamName,
                 registeredAt: firebase.firestore.FieldValue.serverTimestamp()
             });
 
@@ -166,6 +167,14 @@ const TournamentOverview = () => {
                                     </div>
                                 ) : (
                                     <form onSubmit={handleRegister} className="max-w-xl mx-auto space-y-6 bg-slate-800/20 p-8 rounded-2xl border border-slate-800">
+                                        <input 
+                                            type="text"
+                                            placeholder="Enter Your Team/Player Name"
+                                            value={userTeamName}
+                                            onChange={(e) => setUserTeamName(e.target.value)}
+                                            className="w-full bg-slate-700 border-slate-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 text-white"
+                                            required
+                                        />
                                         <button 
                                             type="submit" 
                                             disabled={isSubmitting}
