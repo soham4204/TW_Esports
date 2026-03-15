@@ -8,8 +8,8 @@ const LandingPage = () => {
   const features = [
     {
       icon: <Zap className="w-8 h-8 text-yellow-400" />,
-      title: "Instant Entry",
-      description: "No accounts. No passwords. Just enter your Game ID and start competing immediately."
+      title: "Discord Linked",
+      description: "Seamlessly log in with your Discord account to instantly register for tournaments."
     },
     {
       icon: <Trophy className="w-8 h-8 text-blue-400" />,
@@ -49,7 +49,7 @@ const LandingPage = () => {
             </button>
           </Link>
           <p className="mt-4 text-gray-400 animate-pulse">
-            No registration required. Join in seconds.
+            Connect your Discord. Compete for glory.
           </p>
         </div>
 
@@ -73,7 +73,6 @@ const LandingPage = () => {
           <AdComponent adSlot={3058069917}/>
         </div>
       </div>
-      <Footer />
     </div>
   );
 };

@@ -9,6 +9,7 @@ import AboutUs from './routes/AboutUs';
 import PrivacyPolicy from './routes/PrivacyPolicy';
 import Terms from './routes/Terms';
 import Disclaimer from './routes/Disclaimer';
+import DiscordCallback from './routes/DiscordCallback';
 import Footer from './components/Footer';
 
 function App() {
@@ -22,6 +23,7 @@ function App() {
           <Route path="/my-tournaments" element={<MyTournamentComponent />} />
           <Route path="/contactus" element={<ContactUsComponent />} />
           <Route path="/tournament/:id" element={<TournamentOverview />} />
+          <Route path="/auth/discord/callback" element={<DiscordCallback />} />
 
           {/* Secret Admin Route - Use a unique string here */}
           <Route path="/admin" element={<AdminDashboardComponent />} />

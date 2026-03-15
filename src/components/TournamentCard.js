@@ -9,7 +9,7 @@ const TournamentCard = ({ tournament }) => {
     return (
         <div 
             onClick={() => navigate(`/tournament/${tournament.id}`)}
-            className="max-w-md mx-auto bg-slate-900 rounded-xl border border-slate-700 overflow-hidden shadow-lg mb-6 cursor-pointer hover:border-blue-500 transition-all hover:scale-[1.02] group"
+            className="w-full h-full flex flex-col bg-slate-900 rounded-xl border border-slate-700 overflow-hidden shadow-lg cursor-pointer hover:border-blue-500 transition-all hover:-translate-y-1 hover:shadow-blue-500/20 group"
         >
             <div className="relative">
                 <img src={tournament.thumbnail} alt="Banner" className="w-full h-40 object-cover" />
@@ -28,12 +28,12 @@ const TournamentCard = ({ tournament }) => {
                 </div>
             </div>
             
-            <div className="px-4 py-3 bg-slate-800/50 flex justify-between items-center border-t border-slate-700">
+            <div className="mt-auto px-4 py-3 bg-slate-800/50 flex justify-between items-center border-t border-slate-700">
                 <div className="flex items-center gap-2 text-slate-300">
                     <Users size={16} className="text-blue-400" />
                     <span className="text-sm font-medium">{tournament.slots} Total Slots</span>
                 </div>
-                <span className="text-xs text-slate-500 italic">Click for full details</span>
+                <span className="text-xs text-slate-500 italic">Click for details</span>
             </div>
         </div>
     );

@@ -1,19 +1,45 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { auth } from '../firebase-config';
 import { 
   Trophy, 
   MessageCircle, 
   Info, 
   ShieldCheck, 
   FileText, 
-  AlertTriangle 
+  AlertTriangle,
+  LogOut,
+  User
 } from 'lucide-react';
 import logo from '../assets/Logo.png';
+import LoginModal from './LoginModal';
 
 const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [user, setUser] = useState(null);
+  const [discordProfile, setDiscordProfile] = useState(null);
+  
   const location = useLocation();
 
+  useEffect(() => {
+    // Listen to Firebase Auth state changes
+    const unsubscribe = auth.onAuthStateChanged(currentUser => {
+      setUser(currentUser);
+      if (currentUser) {
+        // Retrieve the Discord profile we cached in localStorage during callback
+        const cachedProfile = localStorage.getItem('discordUser');
+        if (cachedProfile) {
+          setDiscordProfile(JSON.parse(cachedProfile));
+        }
+      } else {
+        setDiscordProfile(null);
+        localStorage.removeItem('discordUser');
+      }
+    });
+
+    return unsubscribe;
+  }, []);
   useEffect(() => {
     const handleScroll = () => {
       setScrolled(window.scrollY > 20);
@@ -78,8 +104,50 @@ const Navbar = () => {
               <span className="hidden lg:inline">Disclaimer</span>
             </NavLink>
           </div>
+
+          {/* User Profile / Login Button */}
+          <div className="flex items-center space-x-4 pl-4 border-l border-slate-700 ml-2">
+            {user ? (
+              <div className="flex items-center space-x-3 group cursor-pointer relative">
+                <div className="flex items-center space-x-2">
+                  {discordProfile?.avatar ? (
+                    <img src={discordProfile.avatar} alt="Profile" className="w-8 h-8 rounded-full border border-indigo-500" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center border border-indigo-500">
+                      <User size={16} className="text-white" />
+                    </div>
+                  )}
+                  <span className="hidden md:inline text-sm font-bold text-white max-w-[100px] truncate">
+                    {discordProfile?.username || "Player"}
+                  </span>
+                </div>
+                
+                {/* Logout Dropdown logic simple implementation */}
+                <button 
+                  onClick={() => auth.signOut()}
+                  className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
+                  title="Logout"
+                >
+                  <LogOut size={18} />
+                </button>
+              </div>
+            ) : (
+              <button 
+                onClick={() => setIsLoginModalOpen(true)}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-bold font-poppins transition-all shadow-lg shadow-indigo-500/30"
+              >
+                Login
+              </button>
+            )}
+          </div>
+
         </div>
       </div>
+      
+      <LoginModal 
+        isOpen={isLoginModalOpen} 
+        onClose={() => setIsLoginModalOpen(false)} 
+      />
     </nav>
   );
 };

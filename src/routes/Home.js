@@ -37,12 +37,12 @@ const HomeComponent = () => {
     return (
         <div className="flex flex-col h-screen overflow-auto bg-gray-900 text-white">
             <Navbar/>
-            <div className="flex-grow p-4 mt-4">
-                {tournaments.map((tournament) => (
-                    <div key={tournament.id} className="w-full px-4">
-                        <TournamentCard tournament={tournament} />
-                    </div>
-                ))}
+            <div className="flex-grow p-4 mt-2 md:mt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
+                    {tournaments.map((tournament) => (
+                        <TournamentCard key={tournament.id} tournament={tournament} />
+                    ))}
+                </div>
             </div>
             {/* Ad Component */}
             <div className="bg-gray-800 p-4 text-center">
