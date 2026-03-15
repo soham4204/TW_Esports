@@ -2,7 +2,6 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Trophy, Users, Zap, ShieldCheck } from 'lucide-react';
 import AdComponent from '../components/AdComponent';
-import Footer from '../components/Footer';
 
 const LandingPage = () => {
   const features = [
