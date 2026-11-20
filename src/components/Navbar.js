@@ -74,6 +74,10 @@ const Navbar = () => {
 
           {/* Navigation Links */}
           <div className="flex items-center space-x-1 overflow-x-auto no-scrollbar">
+            <NavLink to="/leaderboard" active={isActivePage('/leaderboard')}>
+              <Trophy size={18} className="text-yellow-400" />
+              <span className="font-bold text-yellow-400">Leaderboard</span>
+            </NavLink>
             <NavLink to="/my-tournaments" active={isActivePage('/my-tournaments')}>
               <Trophy size={18} />
               <span className="hidden md:inline">My Tournaments</span>
