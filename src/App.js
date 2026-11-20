@@ -5,6 +5,7 @@ import LandingPageComponent from './routes/LandingPage';
 import AdminDashboardComponent from './routes/AdminDashboard';
 import MyTournamentComponent from './routes/MyTournaments';
 import TournamentOverview from './routes/TournamentOverview';
+import LeaderboardPage from './routes/LeaderboardPage';
 import AboutUs from './routes/AboutUs';
 import PrivacyPolicy from './routes/PrivacyPolicy';
 import Terms from './routes/Terms';
@@ -23,6 +24,7 @@ function App() {
           <Route path="/my-tournaments" element={<MyTournamentComponent />} />
           <Route path="/contactus" element={<ContactUsComponent />} />
           <Route path="/tournament/:id" element={<TournamentOverview />} />
+          <Route path="/leaderboard" element={<LeaderboardPage />} />
           <Route path="/auth/discord/callback" element={<DiscordCallback />} />
 
           {/* Secret Admin Route - Use a unique string here */}
