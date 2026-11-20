@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { db } from '../firebase-config';
-import { X, CheckCircle, AlertCircle, Shield } from 'lucide-react';
+import { X, AlertCircle, Shield } from 'lucide-react';
 
 export default function LinkBrawlStarsModal({ isOpen, onClose, user, onLinked }) {
   const [tagInput, setTagInput] = useState('');
