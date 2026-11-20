@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase-config';
-import { Trophy, Flame, RefreshCw, Medal, Swords } from 'lucide-react';
+import { Trophy, RefreshCw, Swords } from 'lucide-react';
 import axios from 'axios';
 
 export default function LeaderboardTable({ tournamentId, tournamentCategory, currentPlayerTag }) {
