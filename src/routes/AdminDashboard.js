@@ -14,9 +14,17 @@ import {
     AlertCircle,
     Check,
     Upload,
-    Loader2
+    Loader2,
+    Trophy,
+    Clock,
+    RefreshCw,
+    Zap,
+    IndianRupee,
+    Swords,
+    Sparkles
 } from 'lucide-react';
 import BackButton from '../components/BackButton';
+import axios from 'axios';
 
 const AdminDashboard = () => {
     // Authorization State
@@ -28,43 +36,114 @@ const AdminDashboard = () => {
     const [tournamentName, setTournamentName] = useState('');
     const [description, setDescription] = useState('');
     const [thumbnailURL, setThumbnailURL] = useState('');
-    const [isUploading, setIsUploading] = useState(false); // Added missing state
+    const [isUploading, setIsUploading] = useState(false);
     const [slots, setSlots] = useState('');
     const [discordlink, setDiscordLink] = useState('');
-    const [type, setType] = useState('');
+    const [type, setType] = useState('1v1');
+    const [category, setCategory] = useState('trophy'); // 'trophy' | 'ranked'
+    const [prizePool, setPrizePool] = useState('');
+    const [startsAt, setStartsAt] = useState('');
+    const [endsAt, setEndsAt] = useState('');
+
     const [showForm, setShowForm] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
     const [tournaments, setTournaments] = useState([]);
     const [selectedTournament, setSelectedTournament] = useState(null);
     const [showTournamentList, setShowTournamentList] = useState(false);
     const [teams, setTeams] = useState({});
+    const [leaderboards, setLeaderboards] = useState({});
     const [isEditing, setIsEditing] = useState(false);
     const [editingId, setEditingId] = useState(null);
+
+    // Syncing State
+    const [syncingPlayer, setSyncingPlayer] = useState(null);
+    const [syncStatusMsg, setSyncStatusMsg] = useState('');
 
     const CLOUDINARY_UPLOAD_PRESET = "R7Esports"; 
     const CLOUDINARY_CLOUD_NAME = "dihawgvdz";
 
-    useEffect(() => {
-    const queryParams = new URLSearchParams(location.search);
-    const secretKey = queryParams.get('key');
+    // Date formatting helper for <input type="datetime-local" />
+    const formatDateForInput = (val) => {
+        if (!val) return '';
+        try {
+            const d = val.toDate ? val.toDate() : new Date(val);
+            if (isNaN(d.getTime())) return '';
+            const pad = (n) => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        } catch {
+            return '';
+        }
+    };
 
-    if (secretKey && secretKey.toLowerCase() === 'r7esports') {
-        // Perform a silent login so Firestore recognizes your permissions
-        // You must have already created this user in the Firebase Auth console
-        auth.signInWithEmailAndPassword('r7esports@gmail.com', '12345678')
-            .then(() => {
-                setIsAuthorized(true);
-                fetchTournaments();
-            })
-            .catch((err) => {
-                console.error("Admin Auth Failed:", err.message);
-                navigate('/home');
+    // Date display helper
+    const formatDisplayDate = (val) => {
+        if (!val) return 'Schedule not set';
+        try {
+            const d = val.toDate ? val.toDate() : new Date(val);
+            if (isNaN(d.getTime())) return 'Schedule not set';
+            return d.toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
             });
-    } else {
-        console.error('Unauthorized access attempt');
-        navigate('/home');
-    }
-}, [location, navigate]);
+        } catch {
+            return 'Schedule not set';
+        }
+    };
+
+    // Helper: Determine tournament status
+    const getTournamentStatus = (startVal, endVal) => {
+        if (!startVal && !endVal) {
+            return { label: 'No Schedule', color: 'bg-gray-700/60 text-gray-300 border-gray-600', dot: 'bg-gray-400' };
+        }
+        const now = new Date();
+        const start = startVal ? (startVal.toDate ? startVal.toDate() : new Date(startVal)) : null;
+        const end = endVal ? (endVal.toDate ? endVal.toDate() : new Date(endVal)) : null;
+
+        if (start && now < start) {
+            return { label: 'Upcoming', color: 'bg-amber-500/20 text-amber-300 border-amber-500/40', dot: 'bg-amber-400' };
+        }
+        if (end && now > end) {
+            return { label: 'Ended', color: 'bg-rose-500/20 text-rose-300 border-rose-500/40', dot: 'bg-rose-400' };
+        }
+        return { label: 'Live Now', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', dot: 'bg-emerald-400 animate-pulse' };
+    };
+
+    // Quick duration preset applicator
+    const applyDurationPreset = (hours) => {
+        const now = new Date();
+        const start = startsAt ? new Date(startsAt) : now;
+        const end = new Date(start.getTime() + hours * 60 * 60 * 1000);
+        if (!startsAt) {
+            setStartsAt(formatDateForInput(start));
+        }
+        setEndsAt(formatDateForInput(end));
+    };
+
+    const setStartToNow = () => {
+        setStartsAt(formatDateForInput(new Date()));
+    };
+
+    useEffect(() => {
+        const queryParams = new URLSearchParams(location.search);
+        const secretKey = queryParams.get('key');
+
+        if (secretKey && secretKey.toLowerCase() === 'r7esports') {
+            auth.signInWithEmailAndPassword('r7esports@gmail.com', '12345678')
+                .then(() => {
+                    setIsAuthorized(true);
+                    fetchTournaments();
+                })
+                .catch((err) => {
+                    console.error("Admin Auth Failed:", err.message);
+                    navigate('/home');
+                });
+        } else {
+            console.error('Unauthorized access attempt');
+            navigate('/home');
+        }
+    }, [location, navigate]);
 
     const fetchTournaments = async () => {
         try {
@@ -114,18 +193,26 @@ const AdminDashboard = () => {
         setThumbnailURL('');
         setSlots('');
         setDiscordLink('');
-        setType('');
+        setType('1v1');
+        setCategory('trophy');
+        setPrizePool('');
+        setStartsAt('');
+        setEndsAt('');
         setIsEditing(false);
         setEditingId(null);
     };
 
     const handleEditTournament = (tournament) => {
-        setTournamentName(tournament.name);
-        setDescription(tournament.description);
-        setThumbnailURL(tournament.thumbnail);
-        setSlots(tournament.slots);
-        setDiscordLink(tournament.discordlink);
-        setType(tournament.type);
+        setTournamentName(tournament.name || '');
+        setDescription(tournament.description || '');
+        setThumbnailURL(tournament.thumbnail || '');
+        setSlots(tournament.slots || '');
+        setDiscordLink(tournament.discordlink || '');
+        setType(tournament.type || '1v1');
+        setCategory(tournament.category || 'trophy');
+        setPrizePool(tournament.prizePool !== undefined ? tournament.prizePool : '');
+        setStartsAt(formatDateForInput(tournament.startsAt));
+        setEndsAt(formatDateForInput(tournament.endsAt));
         setIsEditing(true);
         setEditingId(tournament.id);
         setShowForm(true);
@@ -146,38 +233,43 @@ const AdminDashboard = () => {
     };    
 
     const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!thumbnailURL) {
-        alert("Please upload a thumbnail first.");
-        return;
-    }
-    try {
-        const tournamentData = {
-            name: tournamentName,
-            description,
-            thumbnail: thumbnailURL,
-            slots: Number(slots), // FIX: Ensure this is a number for math
-            discordlink,
-            type,
-            createdAt: new Date() // Good practice for sorting
-        };
-
-        if (isEditing) {
-            await db.collection('tournaments').doc(editingId).update(tournamentData);
-            setSuccessMessage('Tournament updated successfully');
-        } else {
-            // FIX: Use .add() to generate a unique ID and avoid "Zombie" data from old names
-            await db.collection('tournaments').add(tournamentData); 
-            setSuccessMessage('Tournament added successfully');
+        e.preventDefault();
+        if (!thumbnailURL) {
+            alert("Please upload a thumbnail first.");
+            return;
         }
 
-        resetForm();
-        setShowForm(false);
-        fetchTournaments();
-    } catch (error) {
-        console.error('Error saving tournament: ', error);
-    }
-};
+        try {
+            const tournamentData = {
+                name: tournamentName,
+                description,
+                thumbnail: thumbnailURL,
+                slots: Number(slots) || 0,
+                discordlink,
+                type,
+                category: category || 'trophy',
+                prizePool: Number(prizePool) || 0,
+                startsAt: startsAt ? new Date(startsAt).toISOString() : null,
+                endsAt: endsAt ? new Date(endsAt).toISOString() : null,
+                updatedAt: new Date(),
+                ...(isEditing ? {} : { createdAt: new Date() })
+            };
+
+            if (isEditing) {
+                await db.collection('tournaments').doc(editingId).update(tournamentData);
+                setSuccessMessage('Tournament updated successfully');
+            } else {
+                await db.collection('tournaments').add(tournamentData); 
+                setSuccessMessage('Tournament added successfully');
+            }
+
+            resetForm();
+            setShowForm(false);
+            fetchTournaments();
+        } catch (error) {
+            console.error('Error saving tournament: ', error);
+        }
+    };
 
     const fetchTeams = async (tournamentId) => {
         try {
@@ -192,6 +284,19 @@ const AdminDashboard = () => {
         }
     };
 
+    const fetchLeaderboard = async (tournamentId) => {
+        try {
+            const lbSnapshot = await db.collection('tournaments').doc(tournamentId).collection('leaderboard').orderBy('totalScore', 'desc').get();
+            const lbData = lbSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+            }));
+            setLeaderboards(prev => ({ ...prev, [tournamentId]: lbData }));
+        } catch (error) {
+            console.error('Error fetching leaderboard: ', error);
+        }
+    };
+
     const handleManageTournaments = () => {
         setShowTournamentList(!showTournamentList);
         setSelectedTournament(null);
@@ -199,113 +304,385 @@ const AdminDashboard = () => {
 
     const handleTournamentClick = async (tournament) => {
         setSelectedTournament(tournament);
-        await fetchTeams(tournament.id);
+        await Promise.all([
+            fetchTeams(tournament.id),
+            fetchLeaderboard(tournament.id)
+        ]);
+    };
+
+    // Force Sync an Individual Player's Matches
+    const handleForceSyncPlayer = async (tournamentId, playerTag) => {
+        if (!tournamentId || !playerTag) return;
+        setSyncingPlayer(playerTag);
+        setSyncStatusMsg(`Syncing ${playerTag}...`);
+
+        try {
+            const res = await axios.post('/api/brawlstars/sync', {
+                tournamentId,
+                playerTag
+            });
+            const pts = res.data.pointsAdded || 0;
+            const newM = res.data.newMatchesFound || 0;
+            setSuccessMessage(`Synced ${playerTag}: +${pts} pts from ${newM} new matches!`);
+            await fetchLeaderboard(tournamentId);
+        } catch (err) {
+            console.error('Sync failed:', err);
+            alert(`Failed to sync ${playerTag}: ${err.response?.data?.error || err.message}`);
+        } finally {
+            setSyncingPlayer(null);
+            setSyncStatusMsg('');
+            setTimeout(() => setSuccessMessage(''), 5000);
+        }
+    };
+
+    // Force Sync All Registered Players
+    const handleForceSyncAll = async (tournamentId) => {
+        const currentLb = leaderboards[tournamentId] || [];
+        if (currentLb.length === 0) {
+            alert('No registered players found in the tournament leaderboard to sync.');
+            return;
+        }
+
+        setSyncingPlayer('ALL');
+        let totalNewMatches = 0;
+        let totalPtsAdded = 0;
+
+        for (let i = 0; i < currentLb.length; i++) {
+            const p = currentLb[i];
+            const tag = p.playerTag || p.id;
+            setSyncStatusMsg(`Syncing player ${i + 1} of ${currentLb.length} (${tag})...`);
+            try {
+                const res = await axios.post('/api/brawlstars/sync', {
+                    tournamentId,
+                    playerTag: tag
+                });
+                if (res.data?.newMatchesFound > 0) {
+                    totalNewMatches += res.data.newMatchesFound;
+                    totalPtsAdded += (res.data.pointsAdded || 0);
+                }
+            } catch (err) {
+                console.error(`Sync error for ${tag}:`, err);
+            }
+        }
+
+        await fetchLeaderboard(tournamentId);
+        setSyncingPlayer(null);
+        setSyncStatusMsg('');
+        setSuccessMessage(`✅ Force sync complete! ${currentLb.length} players updated (+${totalPtsAdded} pts, ${totalNewMatches} new matches)`);
+        setTimeout(() => setSuccessMessage(''), 6000);
     };
 
     if (!isAuthorized) {
         return null; 
     }
 
+    const currentFormStatus = getTournamentStatus(startsAt, endsAt);
+
     return (
-        <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white">
+        <div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 text-white pb-16">
             <div className="max-w-7xl mx-auto px-4 py-6">
-                <div className="flex justify-between items-center mb-8">
+                {/* Header */}
+                <div className="flex justify-between items-center mb-8 border-b border-gray-800 pb-4">
                     <BackButton path="/home" />
-                    <img src={logo} alt="TW Esports Logo" className="h-16" />
+                    <div className="flex items-center gap-3">
+                        <img src={logo} alt="R7 Esports" className="h-12" />
+                        <div>
+                            <h1 className="text-xl font-black tracking-wider uppercase text-yellow-500">R7 Admin Hub</h1>
+                            <p className="text-xs text-gray-400">Tournament Control & Brawl Stars Engine</p>
+                        </div>
+                    </div>
                 </div>
 
+                {/* Primary Action Buttons */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
                     <button 
                         onClick={toggleForm}
-                        className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 transition-colors p-4 rounded-lg text-lg font-medium"
+                        className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 transition-all p-4 rounded-xl text-lg font-bold shadow-lg shadow-blue-500/20"
                     >
                         {showForm ? <X className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
-                        {showForm ? "Close Form" : "Add Tournament"}
+                        {showForm ? "Close Form" : "Create New Tournament"}
                     </button>
                     <button 
                         onClick={handleManageTournaments}
-                        className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 transition-colors p-4 rounded-lg text-lg font-medium"
+                        className="flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all p-4 rounded-xl text-lg font-bold shadow-lg shadow-purple-500/20"
                     >
                         <Users className="h-5 w-5" />
                         {showTournamentList ? "Close Manager" : "Manage Tournaments"}
                     </button>
                 </div>
 
+                {/* Status Messages */}
                 {successMessage && (
-                    <div className="mb-6 bg-green-600 text-white p-4 rounded-lg flex items-center gap-2">
-                        <Check className="h-5 w-5" />
-                        <p>{successMessage}</p>
+                    <div className="mb-6 bg-emerald-600/90 text-white p-4 rounded-xl flex items-center gap-3 border border-emerald-500 shadow-lg">
+                        <Check className="h-6 w-6 shrink-0" />
+                        <p className="font-semibold">{successMessage}</p>
                     </div>
                 )}
 
+                {/* --- TOURNAMENT CREATION / EDIT FORM --- */}
                 {showForm && (
-                    <div className="mb-8 bg-gray-800 border border-gray-700 rounded-lg p-6 shadow-xl">
-                        <h2 className="text-2xl font-bold mb-6">
-                            {isEditing ? 'Edit Tournament' : 'Create New Tournament'}
-                        </h2>
+                    <div className="mb-10 bg-gray-900 border border-gray-700/80 rounded-2xl p-6 sm:p-8 shadow-2xl">
+                        <div className="flex items-center justify-between border-b border-gray-800 pb-4 mb-6">
+                            <div>
+                                <h2 className="text-2xl font-black tracking-wide text-white flex items-center gap-2">
+                                    {isEditing ? <Edit className="h-6 w-6 text-yellow-500" /> : <Plus className="h-6 w-6 text-blue-500" />}
+                                    {isEditing ? 'Edit Tournament' : 'Create New Tournament'}
+                                </h2>
+                                <p className="text-sm text-gray-400 mt-1">Configure modes, scheduling, cumulative scoring window, and prize pools.</p>
+                            </div>
+                            <button onClick={toggleForm} className="p-2 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white">
+                                <X size={20} />
+                            </button>
+                        </div>
+
                         <form onSubmit={handleSubmit} className="space-y-6">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* Name Input */}
+                                {/* Tournament Name */}
                                 <div className="space-y-2">
-                                    <label className="text-sm font-medium">Tournament Name</label>
+                                    <label className="text-sm font-semibold text-gray-300">Tournament Name</label>
                                     <div className="relative">
                                         <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                                         <input
                                             type="text"
                                             value={tournamentName}
                                             onChange={(e) => setTournamentName(e.target.value)}
-                                            className="w-full bg-gray-700 border-gray-600 rounded-lg pl-10 pr-4 py-2 focus:ring-2 focus:ring-blue-500"
-                                            placeholder="Enter tournament name"
-                                            // disabled={isEditing}
+                                            className="w-full bg-gray-800/90 border border-gray-700 rounded-xl pl-10 pr-4 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                            placeholder="e.g. Brawl Masters Weekly Cup"
                                             required
                                         />
                                     </div>
                                 </div>
 
-                                {/* Type Selection */}
+                                {/* Tournament Type (Team Size) */}
                                 <div className="space-y-2">
-                                    <label className="text-sm font-medium">Tournament Type</label>
+                                    <label className="text-sm font-semibold text-gray-300">Format / Team Size</label>
                                     <div className="relative">
                                         <Users className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                                         <select
                                             value={type}
                                             onChange={(e) => setType(e.target.value)}
-                                            className="w-full bg-gray-700 border-gray-600 rounded-lg pl-10 pr-4 py-2 appearance-none focus:ring-2 focus:ring-blue-500"
+                                            className="w-full bg-gray-800/90 border border-gray-700 rounded-xl pl-10 pr-4 py-3 appearance-none focus:ring-2 focus:ring-blue-500 focus:outline-none font-medium"
                                             required
                                         >
-                                            <option value="">Select Type</option>
-                                            <option value="1v1">1v1</option>
-                                            <option value="2v2">2v2</option>
-                                            <option value="3v3">3v3</option>
+                                            <option value="1v1">Solo (1v1) - Solo Showdown & Ranked</option>
+                                            <option value="2v2">Duo (2v2) - Duo Showdown</option>
+                                            <option value="3v3">Squad (3v3) - Gem Grab, Brawl Ball, Bounty</option>
                                         </select>
                                         <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
                                     </div>
                                 </div>
 
-                                {/* Image Upload logic replaces old Thumbnail URL input */}
+                                {/* Tournament Category: Trophy vs Ranked */}
+                                <div className="space-y-2">
+                                    <label className="text-sm font-semibold text-gray-300 flex items-center justify-between">
+                                        <span>Brawl Stars Mode Category</span>
+                                        <span className="text-xs text-yellow-500 font-bold uppercase tracking-wider">Scoring Filter</span>
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => setCategory('trophy')}
+                                            className={`p-3 rounded-xl border flex items-center justify-center gap-2 font-bold text-sm transition-all ${
+                                                category === 'trophy' 
+                                                    ? 'bg-amber-500/20 border-amber-500 text-amber-300 ring-2 ring-amber-500/50 shadow-lg shadow-amber-500/10' 
+                                                    : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
+                                            }`}
+                                        >
+                                            <Trophy size={18} className={category === 'trophy' ? 'text-amber-400' : ''} />
+                                            <span>Trophy Ladder</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCategory('ranked')}
+                                            className={`p-3 rounded-xl border flex items-center justify-center gap-2 font-bold text-sm transition-all ${
+                                                category === 'ranked' 
+                                                    ? 'bg-purple-500/20 border-purple-500 text-purple-300 ring-2 ring-purple-500/50 shadow-lg shadow-purple-500/10' 
+                                                    : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
+                                            }`}
+                                        >
+                                            <Swords size={18} className={category === 'ranked' ? 'text-purple-400' : ''} />
+                                            <span>Ranked Mode</span>
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-gray-400 mt-1">
+                                        {category === 'trophy' 
+                                            ? '🏆 Filters & tracks standard trophy ladder matches only (Ranked battles excluded).' 
+                                            : '⚔️ Filters & tracks soloRanked / teamRanked competitive battles only.'}
+                                    </p>
+                                </div>
+
+                                {/* Prize Pool (INR) */}
+                                <div className="space-y-2">
+                                    <label className="text-sm font-semibold text-gray-300">Prize Pool (INR ₹)</label>
+                                    <div className="relative">
+                                        <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-400" />
+                                        <input
+                                            type="number"
+                                            value={prizePool}
+                                            onChange={(e) => setPrizePool(e.target.value)}
+                                            className="w-full bg-gray-800/90 border border-gray-700 rounded-xl pl-10 pr-4 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                            placeholder="5000"
+                                            min="0"
+                                        />
+                                    </div>
+                                    {/* Quick Prize Presets */}
+                                    <div className="flex gap-2 pt-1">
+                                        {[1000, 2500, 5000, 10000].map(amt => (
+                                            <button
+                                                key={amt}
+                                                type="button"
+                                                onClick={() => setPrizePool(amt)}
+                                                className="text-xs bg-gray-800 hover:bg-gray-700 border border-gray-700 px-2.5 py-1 rounded-lg text-emerald-400 font-bold transition-all"
+                                            >
+                                                ₹{amt.toLocaleString()}
+                                            </button>
+                                        ))}
+                                        <button
+                                            type="button"
+                                            onClick={() => setPrizePool(0)}
+                                            className="text-xs bg-gray-800 hover:bg-gray-700 border border-gray-700 px-2.5 py-1 rounded-lg text-gray-400 font-medium"
+                                        >
+                                            Free
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* ============================================= */}
+                                {/* DEDICATED TIME SECTION */}
+                                {/* ============================================= */}
+                                <div className="md:col-span-2 bg-gray-800/60 border border-indigo-500/30 rounded-2xl p-5 space-y-4">
+                                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-700/60 pb-3">
+                                        <div className="flex items-center gap-2">
+                                            <Clock className="h-5 w-5 text-indigo-400" />
+                                            <h3 className="font-bold text-base text-white">Tournament Time & Scheduling</h3>
+                                            <span className="text-xs text-gray-400">(Cumulative matches outside this window are ignored)</span>
+                                        </div>
+                                        {/* Dynamic Status Preview */}
+                                        <div className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider flex items-center gap-2 ${currentFormStatus.color}`}>
+                                            <span className={`w-2 h-2 rounded-full ${currentFormStatus.dot}`} />
+                                            <span>{currentFormStatus.label}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        {/* Start Time */}
+                                        <div className="space-y-1.5">
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-xs font-bold uppercase tracking-wider text-gray-300">Start Time</label>
+                                                <button
+                                                    type="button"
+                                                    onClick={setStartToNow}
+                                                    className="text-xs text-indigo-400 hover:text-indigo-300 underline font-medium"
+                                                >
+                                                    Set to Now
+                                                </button>
+                                            </div>
+                                            <div className="relative">
+                                                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
+                                                <input
+                                                    type="datetime-local"
+                                                    value={startsAt}
+                                                    onChange={(e) => setStartsAt(e.target.value)}
+                                                    className="w-full bg-gray-900 border border-gray-700 rounded-xl pl-10 pr-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* End Time */}
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-bold uppercase tracking-wider text-gray-300">End Time</label>
+                                            <div className="relative">
+                                                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
+                                                <input
+                                                    type="datetime-local"
+                                                    value={endsAt}
+                                                    onChange={(e) => setEndsAt(e.target.value)}
+                                                    className="w-full bg-gray-900 border border-gray-700 rounded-xl pl-10 pr-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Duration Quick Presets */}
+                                    <div className="pt-2 border-t border-gray-700/50">
+                                        <p className="text-xs text-gray-400 font-semibold mb-2 flex items-center gap-1.5">
+                                            <Sparkles size={14} className="text-indigo-400" />
+                                            <span>Quick Duration Presets (Auto-calculates End Time from Start):</span>
+                                        </p>
+                                        <div className="flex flex-wrap gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => applyDurationPreset(1)}
+                                                className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded-lg text-xs font-bold text-gray-200 transition-all hover:scale-105"
+                                            >
+                                                ⚡ 1 Hour Blitz
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => applyDurationPreset(12)}
+                                                className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded-lg text-xs font-bold text-gray-200 transition-all hover:scale-105"
+                                            >
+                                                ⏱️ 12 Hours Mini
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => applyDurationPreset(24)}
+                                                className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded-lg text-xs font-bold text-gray-200 transition-all hover:scale-105"
+                                            >
+                                                📅 24 Hours (1 Day)
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => applyDurationPreset(48)}
+                                                className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded-lg text-xs font-bold text-gray-200 transition-all hover:scale-105"
+                                            >
+                                                🏆 Weekend 48h
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => applyDurationPreset(168)}
+                                                className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded-lg text-xs font-bold text-gray-200 transition-all hover:scale-105"
+                                            >
+                                                🌟 7 Days Week
+                                            </button>
+                                            {(startsAt || endsAt) && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setStartsAt(''); setEndsAt(''); }}
+                                                    className="px-3 py-1.5 bg-red-900/30 hover:bg-red-900/50 border border-red-700/60 rounded-lg text-xs font-bold text-red-300 transition-all"
+                                                >
+                                                    Clear Time
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Tournament Thumbnail Upload */}
                                 <div className="space-y-2 md:col-span-2">
-                                    <label className="text-sm font-medium">Tournament Thumbnail</label>
-                                    <div className="relative border-2 border-dashed border-gray-600 rounded-lg p-4 bg-gray-700/50 hover:bg-gray-700 transition-all text-center">
+                                    <label className="text-sm font-semibold text-gray-300">Tournament Thumbnail Banner</label>
+                                    <div className="relative border-2 border-dashed border-gray-700 rounded-2xl p-4 bg-gray-800/40 hover:bg-gray-800/70 transition-all text-center">
                                         {isUploading ? (
-                                            <div className="flex flex-col items-center gap-2 py-4">
+                                            <div className="flex flex-col items-center gap-2 py-6">
                                                 <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-                                                <p className="text-sm text-gray-400">Uploading to Cloudinary...</p>
+                                                <p className="text-sm text-gray-400">Uploading to Cloudinary CDN...</p>
                                             </div>
                                         ) : thumbnailURL ? (
                                             <div className="relative inline-block">
-                                                <img src={thumbnailURL} alt="Preview" className="h-32 rounded-lg object-cover mx-auto shadow-lg" />
+                                                <img src={thumbnailURL} alt="Preview" className="h-40 rounded-xl object-cover mx-auto shadow-2xl border border-gray-700" />
                                                 <button 
                                                     type="button"
                                                     onClick={() => setThumbnailURL('')}
-                                                    className="absolute -top-2 -right-2 bg-red-500 rounded-full p-1 hover:bg-red-600"
+                                                    className="absolute -top-2 -right-2 bg-red-600 rounded-full p-1.5 hover:bg-red-500 shadow-lg"
                                                 >
                                                     <X className="h-4 w-4" />
                                                 </button>
                                             </div>
                                         ) : (
-                                            <label className="cursor-pointer flex flex-col items-center gap-2 py-4">
-                                                <Upload className="h-8 w-8 text-gray-400" />
-                                                <span className="text-sm text-gray-400">Click to upload image</span>
+                                            <label className="cursor-pointer flex flex-col items-center gap-2 py-6">
+                                                <Upload className="h-9 w-9 text-gray-400" />
+                                                <span className="text-sm font-medium text-gray-300">Click to upload tournament cover image</span>
+                                                <span className="text-xs text-gray-500">PNG, JPG, or WEBP (16:9 recommended)</span>
                                                 <input 
                                                     type="file" 
                                                     className="hidden" 
@@ -318,132 +695,352 @@ const AdminDashboard = () => {
                                 </div>
 
                                 {/* Description */}
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium">Description</label>
+                                <div className="space-y-2 md:col-span-2">
+                                    <label className="text-sm font-semibold text-gray-300">Description / Rules</label>
                                     <div className="relative">
-                                        <AlertCircle className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                                        <input
-                                            type="text"
+                                        <AlertCircle className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                                        <textarea
                                             value={description}
                                             onChange={(e) => setDescription(e.target.value)}
-                                            className="w-full bg-gray-700 border-gray-600 rounded-lg pl-10 pr-4 py-2 focus:ring-2 focus:ring-blue-500"
-                                            placeholder="Tournament description"
+                                            rows={3}
+                                            className="w-full bg-gray-800/90 border border-gray-700 rounded-xl pl-10 pr-4 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                            placeholder="Cumulative points tournament rules, guidelines, eligibility..."
                                             required
                                         />
                                     </div>
                                 </div>
 
-                                {/* Slots & Discord */}
+                                {/* Player Slots */}
                                 <div className="space-y-2">
-                                    <label className="text-sm font-medium">Slots</label>
+                                    <label className="text-sm font-semibold text-gray-300">Available Slots</label>
                                     <div className="relative">
                                         <Users className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                                         <input
                                             type="number"
                                             value={slots}
                                             onChange={(e) => setSlots(e.target.value)}
-                                            className="w-full bg-gray-700 border-gray-600 rounded-lg pl-10 pr-4 py-2 focus:ring-2 focus:ring-blue-500"
-                                            placeholder="Available slots"
+                                            className="w-full bg-gray-800/90 border border-gray-700 rounded-xl pl-10 pr-4 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                            placeholder="e.g. 50 or 100"
                                             required
                                         />
                                     </div>
                                 </div>
-                                <div className="space-y-2 md:col-span-2">
-                                    <label className="text-sm font-medium">Discord Link</label>
+
+                                {/* Discord Server Link */}
+                                <div className="space-y-2">
+                                    <label className="text-sm font-semibold text-gray-300">Discord Server Link</label>
                                     <div className="relative">
                                         <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                                         <input
                                             type="text"
                                             value={discordlink}
                                             onChange={(e) => setDiscordLink(e.target.value)}
-                                            className="w-full bg-gray-700 border-gray-600 rounded-lg pl-10 pr-4 py-2 focus:ring-2 focus:ring-blue-500"
-                                            placeholder="Discord server URL"
+                                            className="w-full bg-gray-800/90 border border-gray-700 rounded-xl pl-10 pr-4 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                            placeholder="https://discord.gg/..."
                                             required
                                         />
                                     </div>
                                 </div>
                             </div>
+
                             <button
                                 type="submit"
-                                className="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-lg font-bold transition-all mt-6 flex items-center justify-center gap-2 shadow-lg"
+                                className="w-full bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white px-6 py-4 rounded-xl font-black text-lg transition-all shadow-xl shadow-indigo-500/20 flex items-center justify-center gap-2"
                             >
                                 {isEditing ? <Edit className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
-                                {isEditing ? 'Update Tournament' : 'Create Tournament'}
+                                {isEditing ? 'Save Tournament Changes' : 'Publish Tournament'}
                             </button>
                         </form>
                     </div>
                 )}
 
-                {/* --- TOURNAMENT LIST --- */}
+                {/* --- TOURNAMENT CARDS LIST VIEW --- */}
                 {showTournamentList && !selectedTournament && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {tournaments.map(tournament => (
-                            <div key={tournament.id} className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden hover:border-blue-500 transition-all shadow-md">
-                                <div className="p-4">
-                                    <div className="flex justify-end gap-2 mb-4">
-                                        <button onClick={() => handleEditTournament(tournament)} className="p-2 bg-blue-600 hover:bg-blue-700 rounded-full transition-colors"><Edit size={16} /></button>
-                                        <button onClick={() => handleDeleteTournament(tournament.id)} className="p-2 bg-red-600 hover:bg-red-700 rounded-full transition-colors"><Trash2 size={16} /></button>
+                    <div className="space-y-6">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-2xl font-black tracking-wide">All Tournaments ({tournaments.length})</h2>
+                            <p className="text-sm text-gray-400">Click any tournament to view registered players & trigger score sync</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {tournaments.map(tournament => {
+                                const status = getTournamentStatus(tournament.startsAt, tournament.endsAt);
+                                return (
+                                    <div 
+                                        key={tournament.id} 
+                                        className="bg-gray-900 border border-gray-800 hover:border-indigo-500/80 rounded-2xl overflow-hidden transition-all duration-300 shadow-xl flex flex-col group"
+                                    >
+                                        {/* Image & Overlay Badges */}
+                                        <div className="relative h-48 overflow-hidden bg-gray-800">
+                                            <img 
+                                                src={tournament.thumbnail} 
+                                                alt={tournament.name} 
+                                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                                            />
+                                            <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/40 to-transparent" />
+                                            
+                                            {/* Status Badge */}
+                                            <div className={`absolute top-3 left-3 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider flex items-center gap-1.5 backdrop-blur-md ${status.color}`}>
+                                                <span className={`w-2 h-2 rounded-full ${status.dot}`} />
+                                                <span>{status.label}</span>
+                                            </div>
+
+                                            {/* Category Badge */}
+                                            <div className="absolute top-3 right-3 flex items-center gap-1">
+                                                {tournament.category === 'ranked' ? (
+                                                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-purple-900/80 text-purple-200 border border-purple-500/40 backdrop-blur-md flex items-center gap-1">
+                                                        <Swords size={12} /> Ranked
+                                                    </span>
+                                                ) : (
+                                                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-900/80 text-amber-200 border border-amber-500/40 backdrop-blur-md flex items-center gap-1">
+                                                        <Trophy size={12} /> Trophy
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {/* Prize Pool Badge */}
+                                            {tournament.prizePool > 0 && (
+                                                <div className="absolute bottom-3 left-3 px-3 py-1 rounded-lg text-xs font-black bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 backdrop-blur-md flex items-center gap-1">
+                                                    <IndianRupee size={12} />
+                                                    <span>₹{Number(tournament.prizePool).toLocaleString()}</span>
+                                                </div>
+                                            )}
+
+                                            {/* Quick Actions */}
+                                            <div className="absolute bottom-3 right-3 flex items-center gap-2">
+                                                <button 
+                                                    onClick={() => handleEditTournament(tournament)} 
+                                                    className="p-2 bg-blue-600/90 hover:bg-blue-500 text-white rounded-lg transition-colors backdrop-blur-md"
+                                                    title="Edit Tournament"
+                                                >
+                                                    <Edit size={14} />
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleDeleteTournament(tournament.id)} 
+                                                    className="p-2 bg-red-600/90 hover:bg-red-500 text-white rounded-lg transition-colors backdrop-blur-md"
+                                                    title="Delete Tournament"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Content */}
+                                        <div 
+                                            className="p-5 flex-1 flex flex-col justify-between cursor-pointer"
+                                            onClick={() => handleTournamentClick(tournament)}
+                                        >
+                                            <div>
+                                                <h3 className="text-lg font-black text-white group-hover:text-indigo-400 transition-colors line-clamp-1 mb-1.5">
+                                                    {tournament.name}
+                                                </h3>
+                                                <p className="text-gray-400 text-xs line-clamp-2 mb-4">
+                                                    {tournament.description}
+                                                </p>
+                                            </div>
+
+                                            <div className="border-t border-gray-800/80 pt-3 space-y-2 text-xs text-gray-400">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="flex items-center gap-1.5"><Users size={14} className="text-blue-400" /> Slots: {tournament.slots}</span>
+                                                    <span className="font-semibold text-gray-300 uppercase">{tournament.type}</span>
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="flex items-center gap-1.5"><Clock size={14} className="text-indigo-400" /> Window:</span>
+                                                    <span className="text-gray-300 font-medium">
+                                                        {tournament.startsAt ? formatDisplayDate(tournament.startsAt) : 'Anytime'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="cursor-pointer" onClick={() => handleTournamentClick(tournament)}>
-                                        <img src={tournament.thumbnail} alt={tournament.name} className="w-full h-48 object-cover rounded-lg mb-4" />
-                                        <h3 className="text-xl font-bold mb-2">{tournament.name}</h3>
-                                        <p className="text-gray-400 mb-2 line-clamp-2">{tournament.description}</p>
-                                        <div className="flex items-center gap-2 text-blue-400 font-medium"><Users size={16} /><span>Slots: {tournament.slots}</span></div>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
+                                );
+                            })}
+                        </div>
                     </div>
                 )}
 
-                {/* --- SELECTED TOURNAMENT TEAMS --- */}
+                {/* --- SELECTED TOURNAMENT PARTICIPANTS & SYNC MANAGER --- */}
                 {selectedTournament && (
-                    <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300">
-                        <div className="p-6">
-                            <div className="flex items-center justify-between mb-8 border-b border-gray-700 pb-4">
-                                <h2 className="text-3xl font-bold">{selectedTournament.name}</h2>
-                                <button onClick={() => setSelectedTournament(null)} className="p-2 hover:bg-gray-700 rounded-full transition-colors"><X size={24} /></button>
+                    <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-2xl animate-in fade-in duration-300">
+                        {/* Tournament Detail Header */}
+                        <div className="p-6 border-b border-gray-800 bg-gray-900/80 flex flex-wrap items-center justify-between gap-4">
+                            <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Tournament Details & Management</span>
+                                    {selectedTournament.category === 'ranked' ? (
+                                        <span className="px-2 py-0.5 rounded text-[11px] font-black bg-purple-900/60 text-purple-300 border border-purple-500/30 flex items-center gap-1">
+                                            <Swords size={10} /> Ranked Mode
+                                        </span>
+                                    ) : (
+                                        <span className="px-2 py-0.5 rounded text-[11px] font-black bg-amber-900/60 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                                            <Trophy size={10} /> Trophy Ladder
+                                        </span>
+                                    )}
+                                </div>
+                                <h2 className="text-3xl font-black text-white">{selectedTournament.name}</h2>
+                                <p className="text-sm text-gray-400 mt-1 flex items-center gap-3">
+                                    <span>Time: {formatDisplayDate(selectedTournament.startsAt)} - {formatDisplayDate(selectedTournament.endsAt)}</span>
+                                    {selectedTournament.prizePool > 0 && (
+                                        <span className="text-emerald-400 font-bold">Prize Pool: ₹{Number(selectedTournament.prizePool).toLocaleString()}</span>
+                                    )}
+                                </p>
                             </div>
-                            <div className="space-y-4">
-                                {teams[selectedTournament.id]?.length > 0 ? (
-                                    teams[selectedTournament.id].map(team => (
-                                        <details key={team.id} className="bg-gray-700/50 rounded-lg transition-all group border border-gray-600">
-                                            <summary className="p-4 cursor-pointer font-bold hover:bg-gray-600/50 rounded-lg transition-colors flex items-center justify-between">
-                                                <span>{team.teamName}</span>
-                                                <ChevronDown className="h-5 w-5 transform group-open:rotate-180 transition-transform" />
-                                            </summary>
-                                            <div className="p-4 space-y-4 border-t border-gray-600 bg-gray-800/50">
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                                    <div className="p-3 bg-gray-900/50 rounded-lg border border-gray-700">
-                                                        <p className="text-xs text-blue-400 font-bold uppercase tracking-wider mb-1">Player 1</p>
-                                                        <p className="font-semibold">{team.player1InGameName}</p>
-                                                        <p className="text-sm text-gray-400">{team.player1Id}</p>
-                                                    </div>
-                                                    {team.player2Id && (
-                                                        <div className="p-3 bg-gray-900/50 rounded-lg border border-gray-700">
-                                                            <p className="text-xs text-blue-400 font-bold uppercase tracking-wider mb-1">Player 2</p>
-                                                            <p className="font-semibold">{team.player2InGameName}</p>
-                                                            <p className="text-sm text-gray-400">{team.player2Id}</p>
-                                                        </div>
-                                                    )}
-                                                    {team.player3Id && (
-                                                        <div className="p-3 bg-gray-900/50 rounded-lg border border-gray-700">
-                                                            <p className="text-xs text-blue-400 font-bold uppercase tracking-wider mb-1">Player 3</p>
-                                                            <p className="font-semibold">{team.player3InGameName}</p>
-                                                            <p className="text-sm text-gray-400">{team.player3Id}</p>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </details>
-                                    ))
+
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={() => handleForceSyncAll(selectedTournament.id)}
+                                    disabled={syncingPlayer !== null}
+                                    className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black font-black text-sm rounded-xl shadow-lg transition-all disabled:opacity-50"
+                                >
+                                    {syncingPlayer === 'ALL' ? (
+                                        <RefreshCw size={16} className="animate-spin" />
+                                    ) : (
+                                        <Zap size={16} />
+                                    )}
+                                    <span>{syncingPlayer === 'ALL' ? 'Syncing All...' : 'Force Sync All Players'}</span>
+                                </button>
+                                <button 
+                                    onClick={() => handleEditTournament(selectedTournament)} 
+                                    className="p-2.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-xl transition-colors"
+                                    title="Edit Tournament Settings"
+                                >
+                                    <Edit size={18} />
+                                </button>
+                                <button 
+                                    onClick={() => setSelectedTournament(null)} 
+                                    className="p-2.5 hover:bg-gray-800 rounded-xl text-gray-400 hover:text-white transition-colors"
+                                >
+                                    <X size={20} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Live Sync Feedback Banner */}
+                        {syncStatusMsg && (
+                            <div className="bg-indigo-900/70 border-y border-indigo-700/60 px-6 py-3 flex items-center gap-3 text-indigo-200 text-sm">
+                                <RefreshCw size={16} className="animate-spin text-indigo-400 shrink-0" />
+                                <span>{syncStatusMsg}</span>
+                            </div>
+                        )}
+
+                        <div className="p-6 space-y-8">
+                            {/* SECTION: Brawl Stars Live Tracking & Leaderboard */}
+                            <div>
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-2">
+                                        <Trophy className="h-5 w-5 text-yellow-500" />
+                                        <h3 className="text-xl font-bold text-white">Live Leaderboard & Scored Players</h3>
+                                        <span className="text-xs bg-gray-800 px-2.5 py-1 rounded-full text-gray-400 font-bold">
+                                            {leaderboards[selectedTournament.id]?.length || 0} Registered
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-gray-400">Cumulative points from start till end</p>
+                                </div>
+
+                                {leaderboards[selectedTournament.id]?.length > 0 ? (
+                                    <div className="border border-gray-800 rounded-xl overflow-hidden bg-gray-950/60">
+                                        <table className="w-full text-left text-sm">
+                                            <thead className="bg-gray-800/80 text-gray-400 text-xs uppercase tracking-wider border-b border-gray-800">
+                                                <tr>
+                                                    <th className="py-3 px-4">Rank</th>
+                                                    <th className="py-3 px-4">Player / Tag</th>
+                                                    <th className="py-3 px-4 text-center">Matches</th>
+                                                    <th className="py-3 px-4 text-right">Total Points</th>
+                                                    <th className="py-3 px-4 text-center">Admin Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-800/60">
+                                                {leaderboards[selectedTournament.id].map((player, idx) => {
+                                                    const tag = player.playerTag || player.id;
+                                                    const isPlayerSyncing = syncingPlayer === tag;
+                                                    return (
+                                                        <tr key={tag} className="hover:bg-gray-850/50 transition-colors">
+                                                            <td className="py-3 px-4 font-black text-gray-300">
+                                                                #{idx + 1}
+                                                            </td>
+                                                            <td className="py-3 px-4">
+                                                                <div className="font-bold text-white">{player.playerName || 'Player'}</div>
+                                                                <div className="text-xs font-mono text-yellow-500">{tag}</div>
+                                                            </td>
+                                                            <td className="py-3 px-4 text-center font-semibold text-gray-300">
+                                                                {player.matchesPlayed || 0}
+                                                            </td>
+                                                            <td className="py-3 px-4 text-right">
+                                                                <span className="text-base font-black text-yellow-400">
+                                                                    {(player.totalScore || 0).toLocaleString()}
+                                                                </span>
+                                                                <span className="text-xs text-gray-500 ml-1">pts</span>
+                                                            </td>
+                                                            <td className="py-3 px-4 text-center">
+                                                                <button
+                                                                    onClick={() => handleForceSyncPlayer(selectedTournament.id, tag)}
+                                                                    disabled={syncingPlayer !== null}
+                                                                    className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-xs font-bold text-indigo-300 rounded-lg border border-gray-700 transition-all flex items-center justify-center gap-1.5 mx-auto disabled:opacity-50"
+                                                                >
+                                                                    <RefreshCw size={12} className={isPlayerSyncing ? 'animate-spin' : ''} />
+                                                                    <span>{isPlayerSyncing ? 'Syncing...' : 'Sync Score'}</span>
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 ) : (
-                                    <div className="text-center py-12 text-gray-500">
-                                        <Users className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                                        <p>No teams registered for this tournament yet.</p>
+                                    <div className="text-center py-10 bg-gray-950/40 border border-dashed border-gray-800 rounded-xl text-gray-400">
+                                        <Trophy className="h-10 w-10 mx-auto mb-2 opacity-30 text-yellow-500" />
+                                        <p className="font-medium">No Brawl Stars players on this leaderboard yet.</p>
+                                        <p className="text-xs text-gray-500 mt-1">Players will appear here once they register or sync on the tournament page.</p>
                                     </div>
                                 )}
                             </div>
+
+                            {/* SECTION: Registered Teams / Squads (Classic Format) */}
+                            {teams[selectedTournament.id]?.length > 0 && (
+                                <div className="border-t border-gray-800 pt-6">
+                                    <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                        <Users className="h-5 w-5 text-blue-400" />
+                                        <span>Registered Teams & Rosters ({teams[selectedTournament.id].length})</span>
+                                    </h3>
+                                    <div className="space-y-3">
+                                        {teams[selectedTournament.id].map(team => (
+                                            <details key={team.id} className="bg-gray-800/40 rounded-xl border border-gray-800 group transition-all">
+                                                <summary className="p-4 cursor-pointer font-bold hover:bg-gray-800/80 rounded-xl transition-colors flex items-center justify-between">
+                                                    <span className="flex items-center gap-2 text-white">
+                                                        <Users size={16} className="text-indigo-400" />
+                                                        {team.teamName || team.discordUsername || 'Team Entry'}
+                                                    </span>
+                                                    <ChevronDown className="h-5 w-5 text-gray-400 transform group-open:rotate-180 transition-transform" />
+                                                </summary>
+                                                <div className="p-4 border-t border-gray-800 bg-gray-900/60 space-y-3 text-sm">
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                                        <div className="p-3 bg-gray-950/60 rounded-lg border border-gray-800">
+                                                            <p className="text-xs text-indigo-400 font-bold uppercase tracking-wider mb-1">Player 1</p>
+                                                            <p className="font-semibold text-white">{team.player1InGameName || team.brawlStarsName || team.discordUsername || 'Player'}</p>
+                                                            <p className="text-xs font-mono text-gray-400">{team.player1Id || team.playerTag || 'N/A'}</p>
+                                                        </div>
+                                                        {team.player2Id && (
+                                                            <div className="p-3 bg-gray-950/60 rounded-lg border border-gray-800">
+                                                                <p className="text-xs text-indigo-400 font-bold uppercase tracking-wider mb-1">Player 2</p>
+                                                                <p className="font-semibold text-white">{team.player2InGameName}</p>
+                                                                <p className="text-xs font-mono text-gray-400">{team.player2Id}</p>
+                                                            </div>
+                                                        )}
+                                                        {team.player3Id && (
+                                                            <div className="p-3 bg-gray-950/60 rounded-lg border border-gray-800">
+                                                                <p className="text-xs text-indigo-400 font-bold uppercase tracking-wider mb-1">Player 3</p>
+                                                                <p className="font-semibold text-white">{team.player3InGameName}</p>
+                                                                <p className="text-xs font-mono text-gray-400">{team.player3Id}</p>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </details>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
