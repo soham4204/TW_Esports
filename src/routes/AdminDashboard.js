@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase-config';
 import logo from '../assets/Logo.png';
@@ -10,27 +10,43 @@ import {
     Users, 
     Calendar, 
     Link as LinkIcon, 
-    ChevronDown,
-    AlertCircle,
-    Check,
-    Upload,
-    Loader2,
-    Trophy,
-    Clock,
-    RefreshCw,
-    Zap,
-    IndianRupee,
-    Swords,
-    Sparkles
+    ChevronDown, 
+    AlertCircle, 
+    Check, 
+    Upload, 
+    Loader2, 
+    Trophy, 
+    Clock, 
+    RefreshCw, 
+    Zap, 
+    IndianRupee, 
+    Swords, 
+    Sparkles, 
+    Lock, 
+    Key, 
+    Mail, 
+    Eye, 
+    EyeOff, 
+    LogOut,
+    ShieldCheck
 } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import axios from 'axios';
 
 const AdminDashboard = () => {
-    // Authorization State
     const location = useLocation();
     const navigate = useNavigate();
+
+    // Authorization & Gate State
     const [isAuthorized, setIsAuthorized] = useState(false);
+    const [authChecking, setAuthChecking] = useState(true);
+    const [authMethod, setAuthMethod] = useState('passcode'); // 'passcode' | 'credentials'
+    const [passcodeKey, setPasscodeKey] = useState('');
+    const [adminEmail, setAdminEmail] = useState('r7esports@gmail.com');
+    const [adminPassword, setAdminPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [authSubmitting, setAuthSubmitting] = useState(false);
+    const [authErrorMessage, setAuthErrorMessage] = useState('');
 
     // Tournament Management State
     const [tournamentName, setTournamentName] = useState('');
@@ -61,6 +77,150 @@ const AdminDashboard = () => {
 
     const CLOUDINARY_UPLOAD_PRESET = "R7Esports"; 
     const CLOUDINARY_CLOUD_NAME = "dihawgvdz";
+
+    const fetchTournaments = useCallback(async () => {
+        try {
+            const tournamentsSnapshot = await db.collection('tournaments').get();
+            const tournamentsData = tournamentsSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+            }));
+            setTournaments(tournamentsData);
+        } catch (error) {
+            console.error('Error fetching tournaments: ', error);
+        }
+    }, []);
+
+    // Helper: scrub sensitive URL params from history
+    const scrubUrlParams = () => {
+        if (window.history.replaceState) {
+            const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+            window.history.replaceState({ path: cleanUrl }, '', cleanUrl);
+        }
+    };
+
+    // Server-verified Passcode Login
+    const handlePasscodeLogin = useCallback(async (keyToVerify) => {
+        const key = keyToVerify || passcodeKey;
+        if (!key || !key.trim()) {
+            setAuthErrorMessage('Please enter the Admin Passcode Key');
+            return;
+        }
+
+        setAuthSubmitting(true);
+        setAuthErrorMessage('');
+
+        try {
+            const res = await axios.post('/api/admin/auth', { secretKey: key.trim() });
+            if (res.data && res.data.success) {
+                // Securely sign in to Firebase Auth using server-provided auth credential
+                if (res.data.authPayload) {
+                    const rawPassword = window.atob(res.data.authPayload);
+                    await auth.signInWithEmailAndPassword(res.data.email, rawPassword);
+                }
+                sessionStorage.setItem('r7_admin_token', res.data.sessionToken);
+                scrubUrlParams();
+                setIsAuthorized(true);
+                fetchTournaments();
+            } else {
+                setAuthErrorMessage('Invalid Admin Passcode Key.');
+            }
+        } catch (err) {
+            console.error('Server Passcode Verification Failed:', err);
+            setAuthErrorMessage(err.response?.data?.error || 'Invalid Admin Passcode Key. Access denied.');
+        } finally {
+            setAuthSubmitting(false);
+            setAuthChecking(false);
+        }
+    }, [passcodeKey, fetchTournaments]);
+
+    // Initial Auth Verification Check
+    useEffect(() => {
+        const queryParams = new URLSearchParams(location.search);
+        const urlKey = queryParams.get('key');
+
+        // Check if user is already authenticated as admin in Firebase Auth
+        const unsubscribe = auth.onAuthStateChanged(async (currentUser) => {
+            if (currentUser && currentUser.email && currentUser.email.toLowerCase() === 'r7esports@gmail.com') {
+                setIsAuthorized(true);
+                setAuthChecking(false);
+                fetchTournaments();
+                return;
+            }
+
+            // If URL ?key= was provided, attempt server-side verification automatically
+            if (urlKey) {
+                await handlePasscodeLogin(urlKey);
+            } else {
+                // Check if valid session token exists in sessionStorage
+                const savedToken = sessionStorage.getItem('r7_admin_token');
+                if (savedToken) {
+                    try {
+                        const verifyRes = await axios.post('/api/admin/auth', { 
+                            action: 'verify_token', 
+                            token: savedToken 
+                        });
+                        if (verifyRes.data?.valid) {
+                            setIsAuthorized(true);
+                            fetchTournaments();
+                        } else {
+                            sessionStorage.removeItem('r7_admin_token');
+                        }
+                    } catch {
+                        sessionStorage.removeItem('r7_admin_token');
+                    }
+                }
+                setAuthChecking(false);
+            }
+        });
+
+        return () => unsubscribe();
+    }, [location.search, handlePasscodeLogin, fetchTournaments]);
+
+    // Email & Password Login Handler
+    const handleCredentialsLogin = async (e) => {
+        e.preventDefault();
+        if (!adminEmail || !adminPassword) {
+            setAuthErrorMessage('Please enter both admin email and password');
+            return;
+        }
+
+        setAuthSubmitting(true);
+        setAuthErrorMessage('');
+
+        try {
+            const userCred = await auth.signInWithEmailAndPassword(adminEmail.trim(), adminPassword);
+            if (userCred.user && userCred.user.email?.toLowerCase() === 'r7esports@gmail.com') {
+                setIsAuthorized(true);
+                scrubUrlParams();
+                fetchTournaments();
+            } else {
+                await auth.signOut();
+                setAuthErrorMessage('This account is not authorized as an R7 Admin.');
+            }
+        } catch (err) {
+            console.error('Firebase Auth Failed:', err);
+            setAuthErrorMessage(err.message || 'Authentication failed. Please verify credentials.');
+        } finally {
+            setAuthSubmitting(false);
+        }
+    };
+
+    // Admin Logout Handler
+    const handleSignOut = async () => {
+        try {
+            await auth.signOut();
+            sessionStorage.removeItem('r7_admin_token');
+            setIsAuthorized(false);
+            setPasscodeKey('');
+            setAdminPassword('');
+            setSelectedTournament(null);
+            setShowForm(false);
+            scrubUrlParams();
+        } catch (e) {
+            console.error('Logout error:', e);
+        }
+    };
 
     // Date formatting helper for <input type="datetime-local" />
     const formatDateForInput = (val) => {
@@ -123,39 +283,6 @@ const AdminDashboard = () => {
 
     const setStartToNow = () => {
         setStartsAt(formatDateForInput(new Date()));
-    };
-
-    useEffect(() => {
-        const queryParams = new URLSearchParams(location.search);
-        const secretKey = queryParams.get('key');
-
-        if (secretKey && secretKey.toLowerCase() === 'r7esports') {
-            auth.signInWithEmailAndPassword('r7esports@gmail.com', '12345678')
-                .then(() => {
-                    setIsAuthorized(true);
-                    fetchTournaments();
-                })
-                .catch((err) => {
-                    console.error("Admin Auth Failed:", err.message);
-                    navigate('/home');
-                });
-        } else {
-            console.error('Unauthorized access attempt');
-            navigate('/home');
-        }
-    }, [location, navigate]);
-
-    const fetchTournaments = async () => {
-        try {
-            const tournamentsSnapshot = await db.collection('tournaments').get();
-            const tournamentsData = tournamentsSnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-            }));
-            setTournaments(tournamentsData);
-        } catch (error) {
-            console.error('Error fetching tournaments: ', error);
-        }
     };
 
     const handleImageUpload = async (e) => {
@@ -372,24 +499,216 @@ const AdminDashboard = () => {
         setTimeout(() => setSuccessMessage(''), 6000);
     };
 
+    // =========================================================================
+    // RENDER: Loading State
+    // =========================================================================
+    if (authChecking) {
+        return (
+            <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center text-white px-4">
+                <Loader2 size={40} className="animate-spin text-yellow-500 mb-4" />
+                <p className="text-gray-400 font-semibold text-sm">Verifying Admin Authorization...</p>
+            </div>
+        );
+    }
+
+    // =========================================================================
+    // RENDER: Dual-Method Admin Authentication Gateway (If Not Authorized)
+    // =========================================================================
     if (!isAuthorized) {
-        return null; 
+        return (
+            <div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 text-white flex flex-col justify-center items-center px-4 py-12">
+                <div className="w-full max-w-md">
+                    {/* Header with Logo */}
+                    <div className="text-center mb-8">
+                        <img src={logo} alt="R7 Esports" className="h-16 mx-auto mb-3" />
+                        <h1 className="text-2xl font-black uppercase tracking-wider text-white flex items-center justify-center gap-2">
+                            <Lock size={20} className="text-yellow-500" />
+                            <span>R7 Admin Gateway</span>
+                        </h1>
+                        <p className="text-xs text-gray-400 mt-1">Authorized tournament management access only</p>
+                    </div>
+
+                    {/* Dual Auth Container */}
+                    <div className="bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl overflow-hidden p-6 sm:p-8">
+                        {/* Tab Switcher */}
+                        <div className="grid grid-cols-2 gap-2 bg-gray-950/80 p-1.5 rounded-xl border border-gray-800 mb-6">
+                            <button
+                                type="button"
+                                onClick={() => { setAuthMethod('passcode'); setAuthErrorMessage(''); }}
+                                className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold transition-all ${
+                                    authMethod === 'passcode'
+                                        ? 'bg-yellow-500 text-black shadow-md'
+                                        : 'text-gray-400 hover:text-white'
+                                }`}
+                            >
+                                <Key size={14} />
+                                <span>Passcode Key</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { setAuthMethod('credentials'); setAuthErrorMessage(''); }}
+                                className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold transition-all ${
+                                    authMethod === 'credentials'
+                                        ? 'bg-yellow-500 text-black shadow-md'
+                                        : 'text-gray-400 hover:text-white'
+                                }`}
+                            >
+                                <Mail size={14} />
+                                <span>Email & Password</span>
+                            </button>
+                        </div>
+
+                        {/* Error Alert */}
+                        {authErrorMessage && (
+                            <div className="mb-5 bg-rose-500/10 border border-rose-500/40 text-rose-300 p-3.5 rounded-xl text-xs font-semibold flex items-center gap-2.5">
+                                <AlertCircle size={16} className="shrink-0 text-rose-400" />
+                                <span>{authErrorMessage}</span>
+                            </div>
+                        )}
+
+                        {/* METHOD 1: Server-Verified Passcode Key Form */}
+                        {authMethod === 'passcode' && (
+                            <form 
+                                onSubmit={(e) => {
+                                    e.preventDefault();
+                                    handlePasscodeLogin();
+                                }} 
+                                className="space-y-4"
+                            >
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-bold text-gray-300 uppercase tracking-wider">
+                                        Admin Passcode Key
+                                    </label>
+                                    <div className="relative">
+                                        <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
+                                        <input
+                                            type={showPassword ? 'text' : 'password'}
+                                            value={passcodeKey}
+                                            onChange={(e) => setPasscodeKey(e.target.value)}
+                                            placeholder="Enter secret admin key"
+                                            className="w-full bg-gray-950 border border-gray-700 rounded-xl pl-10 pr-10 py-3 text-sm focus:ring-2 focus:ring-yellow-500 focus:outline-none"
+                                            required
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                                        >
+                                            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                        </button>
+                                    </div>
+                                    <p className="text-[11px] text-gray-500 mt-1">
+                                        Verified securely against server environment credentials.
+                                    </p>
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    disabled={authSubmitting}
+                                    className="w-full bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black font-black py-3 px-4 rounded-xl text-sm transition-all shadow-lg shadow-yellow-500/20 flex items-center justify-center gap-2 disabled:opacity-50 mt-4"
+                                >
+                                    {authSubmitting ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
+                                    <span>{authSubmitting ? 'Verifying Key...' : 'Unlock Admin Portal'}</span>
+                                </button>
+                            </form>
+                        )}
+
+                        {/* METHOD 2: Firebase Email & Password Form */}
+                        {authMethod === 'credentials' && (
+                            <form onSubmit={handleCredentialsLogin} className="space-y-4">
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-bold text-gray-300 uppercase tracking-wider">
+                                        Admin Email
+                                    </label>
+                                    <div className="relative">
+                                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
+                                        <input
+                                            type="email"
+                                            value={adminEmail}
+                                            onChange={(e) => setAdminEmail(e.target.value)}
+                                            placeholder="r7esports@gmail.com"
+                                            className="w-full bg-gray-950 border border-gray-700 rounded-xl pl-10 pr-4 py-3 text-sm focus:ring-2 focus:ring-yellow-500 focus:outline-none"
+                                            required
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-bold text-gray-300 uppercase tracking-wider">
+                                        Password
+                                    </label>
+                                    <div className="relative">
+                                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
+                                        <input
+                                            type={showPassword ? 'text' : 'password'}
+                                            value={adminPassword}
+                                            onChange={(e) => setAdminPassword(e.target.value)}
+                                            placeholder="••••••••"
+                                            className="w-full bg-gray-950 border border-gray-700 rounded-xl pl-10 pr-10 py-3 text-sm focus:ring-2 focus:ring-yellow-500 focus:outline-none"
+                                            required
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                                        >
+                                            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    disabled={authSubmitting}
+                                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black py-3 px-4 rounded-xl text-sm transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 disabled:opacity-50 mt-4"
+                                >
+                                    {authSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Lock size={16} />}
+                                    <span>{authSubmitting ? 'Authenticating...' : 'Sign In with Firebase'}</span>
+                                </button>
+                            </form>
+                        )}
+                    </div>
+
+                    <div className="text-center mt-6">
+                        <button
+                            onClick={() => navigate('/home')}
+                            className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                        >
+                            ← Return to R7 Esports Home
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
     }
 
     const currentFormStatus = getTournamentStatus(startsAt, endsAt);
 
+    // =========================================================================
+    // RENDER: Full Authorized Admin Dashboard
+    // =========================================================================
     return (
         <div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 text-white pb-16">
             <div className="max-w-7xl mx-auto px-4 py-6">
-                {/* Header */}
+                {/* Header with Admin Sign Out */}
                 <div className="flex justify-between items-center mb-8 border-b border-gray-800 pb-4">
                     <BackButton path="/home" />
-                    <div className="flex items-center gap-3">
-                        <img src={logo} alt="R7 Esports" className="h-12" />
-                        <div>
-                            <h1 className="text-xl font-black tracking-wider uppercase text-yellow-500">R7 Admin Hub</h1>
-                            <p className="text-xs text-gray-400">Tournament Control & Brawl Stars Engine</p>
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-3">
+                            <img src={logo} alt="R7 Esports" className="h-12" />
+                            <div>
+                                <h1 className="text-xl font-black tracking-wider uppercase text-yellow-500">R7 Admin Hub</h1>
+                                <p className="text-xs text-gray-400">Tournament Control & Brawl Stars Engine</p>
+                            </div>
                         </div>
+                        <button
+                            onClick={handleSignOut}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-gray-800 hover:bg-rose-900/40 text-gray-400 hover:text-rose-300 rounded-xl text-xs font-bold border border-gray-700 hover:border-rose-700/50 transition-all ml-4"
+                            title="Sign out of admin"
+                        >
+                            <LogOut size={14} />
+                            <span>Sign Out</span>
+                        </button>
                     </div>
                 </div>
 
@@ -525,7 +844,6 @@ const AdminDashboard = () => {
                                             min="0"
                                         />
                                     </div>
-                                    {/* Quick Prize Presets */}
                                     <div className="flex gap-2 pt-1">
                                         {[1000, 2500, 5000, 10000].map(amt => (
                                             <button
@@ -547,9 +865,7 @@ const AdminDashboard = () => {
                                     </div>
                                 </div>
 
-                                {/* ============================================= */}
                                 {/* DEDICATED TIME SECTION */}
-                                {/* ============================================= */}
                                 <div className="md:col-span-2 bg-gray-800/60 border border-indigo-500/30 rounded-2xl p-5 space-y-4">
                                     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-700/60 pb-3">
                                         <div className="flex items-center gap-2">
@@ -557,7 +873,6 @@ const AdminDashboard = () => {
                                             <h3 className="font-bold text-base text-white">Tournament Time & Scheduling</h3>
                                             <span className="text-xs text-gray-400">(Cumulative matches outside this window are ignored)</span>
                                         </div>
-                                        {/* Dynamic Status Preview */}
                                         <div className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider flex items-center gap-2 ${currentFormStatus.color}`}>
                                             <span className={`w-2 h-2 rounded-full ${currentFormStatus.dot}`} />
                                             <span>{currentFormStatus.label}</span>
@@ -565,7 +880,6 @@ const AdminDashboard = () => {
                                     </div>
 
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        {/* Start Time */}
                                         <div className="space-y-1.5">
                                             <div className="flex items-center justify-between">
                                                 <label className="text-xs font-bold uppercase tracking-wider text-gray-300">Start Time</label>
@@ -588,7 +902,6 @@ const AdminDashboard = () => {
                                             </div>
                                         </div>
 
-                                        {/* End Time */}
                                         <div className="space-y-1.5">
                                             <label className="text-xs font-bold uppercase tracking-wider text-gray-300">End Time</label>
                                             <div className="relative">
@@ -603,7 +916,6 @@ const AdminDashboard = () => {
                                         </div>
                                     </div>
 
-                                    {/* Duration Quick Presets */}
                                     <div className="pt-2 border-t border-gray-700/50">
                                         <p className="text-xs text-gray-400 font-semibold mb-2 flex items-center gap-1.5">
                                             <Sparkles size={14} className="text-indigo-400" />
@@ -658,7 +970,7 @@ const AdminDashboard = () => {
                                     </div>
                                 </div>
 
-                                {/* Tournament Thumbnail Upload */}
+                                {/* Thumbnail Upload */}
                                 <div className="space-y-2 md:col-span-2">
                                     <label className="text-sm font-semibold text-gray-300">Tournament Thumbnail Banner</label>
                                     <div className="relative border-2 border-dashed border-gray-700 rounded-2xl p-4 bg-gray-800/40 hover:bg-gray-800/70 transition-all text-center">
@@ -710,7 +1022,7 @@ const AdminDashboard = () => {
                                     </div>
                                 </div>
 
-                                {/* Player Slots */}
+                                {/* Slots */}
                                 <div className="space-y-2">
                                     <label className="text-sm font-semibold text-gray-300">Available Slots</label>
                                     <div className="relative">
@@ -726,7 +1038,7 @@ const AdminDashboard = () => {
                                     </div>
                                 </div>
 
-                                {/* Discord Server Link */}
+                                {/* Discord Link */}
                                 <div className="space-y-2">
                                     <label className="text-sm font-semibold text-gray-300">Discord Server Link</label>
                                     <div className="relative">
@@ -770,7 +1082,6 @@ const AdminDashboard = () => {
                                         key={tournament.id} 
                                         className="bg-gray-900 border border-gray-800 hover:border-indigo-500/80 rounded-2xl overflow-hidden transition-all duration-300 shadow-xl flex flex-col group"
                                     >
-                                        {/* Image & Overlay Badges */}
                                         <div className="relative h-48 overflow-hidden bg-gray-800">
                                             <img 
                                                 src={tournament.thumbnail} 
@@ -779,13 +1090,11 @@ const AdminDashboard = () => {
                                             />
                                             <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/40 to-transparent" />
                                             
-                                            {/* Status Badge */}
                                             <div className={`absolute top-3 left-3 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider flex items-center gap-1.5 backdrop-blur-md ${status.color}`}>
                                                 <span className={`w-2 h-2 rounded-full ${status.dot}`} />
                                                 <span>{status.label}</span>
                                             </div>
 
-                                            {/* Category Badge */}
                                             <div className="absolute top-3 right-3 flex items-center gap-1">
                                                 {tournament.category === 'ranked' ? (
                                                     <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-purple-900/80 text-purple-200 border border-purple-500/40 backdrop-blur-md flex items-center gap-1">
@@ -798,7 +1107,6 @@ const AdminDashboard = () => {
                                                 )}
                                             </div>
 
-                                            {/* Prize Pool Badge */}
                                             {tournament.prizePool > 0 && (
                                                 <div className="absolute bottom-3 left-3 px-3 py-1 rounded-lg text-xs font-black bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 backdrop-blur-md flex items-center gap-1">
                                                     <IndianRupee size={12} />
@@ -806,7 +1114,6 @@ const AdminDashboard = () => {
                                                 </div>
                                             )}
 
-                                            {/* Quick Actions */}
                                             <div className="absolute bottom-3 right-3 flex items-center gap-2">
                                                 <button 
                                                     onClick={() => handleEditTournament(tournament)} 
@@ -825,7 +1132,6 @@ const AdminDashboard = () => {
                                             </div>
                                         </div>
 
-                                        {/* Content */}
                                         <div 
                                             className="p-5 flex-1 flex flex-col justify-between cursor-pointer"
                                             onClick={() => handleTournamentClick(tournament)}
@@ -862,7 +1168,6 @@ const AdminDashboard = () => {
                 {/* --- SELECTED TOURNAMENT PARTICIPANTS & SYNC MANAGER --- */}
                 {selectedTournament && (
                     <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-2xl animate-in fade-in duration-300">
-                        {/* Tournament Detail Header */}
                         <div className="p-6 border-b border-gray-800 bg-gray-900/80 flex flex-wrap items-center justify-between gap-4">
                             <div>
                                 <div className="flex items-center gap-2 mb-1">
@@ -915,7 +1220,6 @@ const AdminDashboard = () => {
                             </div>
                         </div>
 
-                        {/* Live Sync Feedback Banner */}
                         {syncStatusMsg && (
                             <div className="bg-indigo-900/70 border-y border-indigo-700/60 px-6 py-3 flex items-center gap-3 text-indigo-200 text-sm">
                                 <RefreshCw size={16} className="animate-spin text-indigo-400 shrink-0" />
@@ -924,7 +1228,6 @@ const AdminDashboard = () => {
                         )}
 
                         <div className="p-6 space-y-8">
-                            {/* SECTION: Brawl Stars Live Tracking & Leaderboard */}
                             <div>
                                 <div className="flex items-center justify-between mb-4">
                                     <div className="flex items-center gap-2">
@@ -996,7 +1299,6 @@ const AdminDashboard = () => {
                                 )}
                             </div>
 
-                            {/* SECTION: Registered Teams / Squads (Classic Format) */}
                             {teams[selectedTournament.id]?.length > 0 && (
                                 <div className="border-t border-gray-800 pt-6">
                                     <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
