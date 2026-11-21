@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import firebase from 'firebase/compat/app';
+import 'firebase/compat/auth';
 import { auth, db } from '../firebase-config';
 import logo from '../assets/Logo.png';
 import { 
@@ -28,7 +30,8 @@ import {
     Eye, 
     EyeOff, 
     LogOut,
-    ShieldCheck
+    ShieldCheck,
+    KeyRound
 } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import axios from 'axios';
@@ -47,6 +50,18 @@ const AdminDashboard = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [authSubmitting, setAuthSubmitting] = useState(false);
     const [authErrorMessage, setAuthErrorMessage] = useState('');
+    const [resetSending, setResetSending] = useState(false);
+    const [resetMessage, setResetMessage] = useState('');
+
+    // In-App Change Password Modal State
+    const [showPasswordModal, setShowPasswordModal] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmNewPassword, setConfirmNewPassword] = useState('');
+    const [showNewPassword, setShowNewPassword] = useState(false);
+    const [passwordModalSubmitting, setPasswordModalSubmitting] = useState(false);
+    const [passwordModalError, setPasswordModalError] = useState('');
+    const [passwordModalSuccess, setPasswordModalSuccess] = useState('');
 
     // Tournament Management State
     const [tournamentName, setTournamentName] = useState('');
@@ -139,7 +154,6 @@ const AdminDashboard = () => {
         const queryParams = new URLSearchParams(location.search);
         const urlKey = queryParams.get('key');
 
-        // Check if user is already authenticated as admin in Firebase Auth
         const unsubscribe = auth.onAuthStateChanged(async (currentUser) => {
             if (currentUser && currentUser.email && currentUser.email.toLowerCase() === 'r7esports@gmail.com') {
                 setIsAuthorized(true);
@@ -148,11 +162,9 @@ const AdminDashboard = () => {
                 return;
             }
 
-            // If URL ?key= was provided, attempt server-side verification automatically
             if (urlKey) {
                 await handlePasscodeLogin(urlKey);
             } else {
-                // Check if valid session token exists in sessionStorage
                 const savedToken = sessionStorage.getItem('r7_admin_token');
                 if (savedToken) {
                     try {
@@ -203,6 +215,74 @@ const AdminDashboard = () => {
             setAuthErrorMessage(err.message || 'Authentication failed. Please verify credentials.');
         } finally {
             setAuthSubmitting(false);
+        }
+    };
+
+    // Send Password Reset Email Trigger
+    const handleSendPasswordReset = async () => {
+        if (!adminEmail) {
+            setAuthErrorMessage('Please enter your admin email first.');
+            return;
+        }
+        setResetSending(true);
+        setResetMessage('');
+        setAuthErrorMessage('');
+        try {
+            await auth.sendPasswordResetEmail(adminEmail.trim());
+            setResetMessage(`Reset link successfully sent to ${adminEmail}! Check your inbox.`);
+        } catch (err) {
+            setAuthErrorMessage(err.message || 'Failed to send password reset email.');
+        } finally {
+            setResetSending(false);
+        }
+    };
+
+    // In-App Change Password Handler
+    const handleChangePasswordSubmit = async (e) => {
+        e.preventDefault();
+        if (!newPassword || newPassword.length < 8) {
+            setPasswordModalError('New password must be at least 8 characters long.');
+            return;
+        }
+        if (newPassword !== confirmNewPassword) {
+            setPasswordModalError('New passwords do not match. Please verify.');
+            return;
+        }
+
+        setPasswordModalSubmitting(true);
+        setPasswordModalError('');
+        setPasswordModalSuccess('');
+
+        try {
+            const user = auth.currentUser;
+            if (!user) {
+                throw new Error('No active admin session found. Please sign in again.');
+            }
+
+            // Re-authenticate if current password is provided (prevents auth/requires-recent-login)
+            if (currentPassword) {
+                const cred = firebase.auth.EmailAuthProvider.credential(user.email, currentPassword);
+                await user.reauthenticateWithCredential(cred);
+            }
+
+            await user.updatePassword(newPassword);
+            setPasswordModalSuccess('🎉 Admin password successfully changed!');
+            setCurrentPassword('');
+            setNewPassword('');
+            setConfirmNewPassword('');
+            setTimeout(() => {
+                setShowPasswordModal(false);
+                setPasswordModalSuccess('');
+            }, 3000);
+        } catch (err) {
+            console.error('Change password failed:', err);
+            if (err.code === 'auth/requires-recent-login') {
+                setPasswordModalError('Security confirmation required: Please enter your current password above.');
+            } else {
+                setPasswordModalError(err.message || 'Failed to update password.');
+            }
+        } finally {
+            setPasswordModalSubmitting(false);
         }
     };
 
@@ -534,7 +614,7 @@ const AdminDashboard = () => {
                         <div className="grid grid-cols-2 gap-2 bg-gray-950/80 p-1.5 rounded-xl border border-gray-800 mb-6">
                             <button
                                 type="button"
-                                onClick={() => { setAuthMethod('passcode'); setAuthErrorMessage(''); }}
+                                onClick={() => { setAuthMethod('passcode'); setAuthErrorMessage(''); setResetMessage(''); }}
                                 className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold transition-all ${
                                     authMethod === 'passcode'
                                         ? 'bg-yellow-500 text-black shadow-md'
@@ -546,7 +626,7 @@ const AdminDashboard = () => {
                             </button>
                             <button
                                 type="button"
-                                onClick={() => { setAuthMethod('credentials'); setAuthErrorMessage(''); }}
+                                onClick={() => { setAuthMethod('credentials'); setAuthErrorMessage(''); setResetMessage(''); }}
                                 className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold transition-all ${
                                     authMethod === 'credentials'
                                         ? 'bg-yellow-500 text-black shadow-md'
@@ -563,6 +643,14 @@ const AdminDashboard = () => {
                             <div className="mb-5 bg-rose-500/10 border border-rose-500/40 text-rose-300 p-3.5 rounded-xl text-xs font-semibold flex items-center gap-2.5">
                                 <AlertCircle size={16} className="shrink-0 text-rose-400" />
                                 <span>{authErrorMessage}</span>
+                            </div>
+                        )}
+
+                        {/* Reset Email Success Alert */}
+                        {resetMessage && (
+                            <div className="mb-5 bg-emerald-500/10 border border-emerald-500/40 text-emerald-300 p-3.5 rounded-xl text-xs font-semibold flex items-center gap-2.5">
+                                <Check size={16} className="shrink-0 text-emerald-400" />
+                                <span>{resetMessage}</span>
                             </div>
                         )}
 
@@ -665,6 +753,18 @@ const AdminDashboard = () => {
                                     {authSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Lock size={16} />}
                                     <span>{authSubmitting ? 'Authenticating...' : 'Sign In with Firebase'}</span>
                                 </button>
+
+                                {/* System in Code: Password Reset Email Trigger */}
+                                <div className="pt-2 text-center border-t border-gray-800">
+                                    <button
+                                        type="button"
+                                        onClick={handleSendPasswordReset}
+                                        disabled={resetSending}
+                                        className="text-xs text-yellow-500 hover:text-yellow-400 font-semibold underline disabled:opacity-50 transition-colors"
+                                    >
+                                        {resetSending ? 'Sending reset link...' : 'Forgot or want to reset password via email?'}
+                                    </button>
+                                </div>
                             </form>
                         )}
                     </div>
@@ -690,20 +790,35 @@ const AdminDashboard = () => {
     return (
         <div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 text-white pb-16">
             <div className="max-w-7xl mx-auto px-4 py-6">
-                {/* Header with Admin Sign Out */}
+                {/* Header with Admin Actions: Change Password & Sign Out */}
                 <div className="flex justify-between items-center mb-8 border-b border-gray-800 pb-4">
                     <BackButton path="/home" />
-                    <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 mr-2">
                             <img src={logo} alt="R7 Esports" className="h-12" />
                             <div>
                                 <h1 className="text-xl font-black tracking-wider uppercase text-yellow-500">R7 Admin Hub</h1>
                                 <p className="text-xs text-gray-400">Tournament Control & Brawl Stars Engine</p>
                             </div>
                         </div>
+
+                        {/* In-Code System: Change Password Button */}
+                        <button
+                            onClick={() => {
+                                setShowPasswordModal(true);
+                                setPasswordModalError('');
+                                setPasswordModalSuccess('');
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-gray-800 hover:bg-yellow-500/20 text-gray-300 hover:text-yellow-400 rounded-xl text-xs font-bold border border-gray-700 hover:border-yellow-500/40 transition-all shadow-sm"
+                            title="Change Admin Password"
+                        >
+                            <KeyRound size={14} className="text-yellow-500" />
+                            <span>Change Password</span>
+                        </button>
+
                         <button
                             onClick={handleSignOut}
-                            className="flex items-center gap-1.5 px-3 py-2 bg-gray-800 hover:bg-rose-900/40 text-gray-400 hover:text-rose-300 rounded-xl text-xs font-bold border border-gray-700 hover:border-rose-700/50 transition-all ml-4"
+                            className="flex items-center gap-1.5 px-3 py-2 bg-gray-800 hover:bg-rose-900/40 text-gray-400 hover:text-rose-300 rounded-xl text-xs font-bold border border-gray-700 hover:border-rose-700/50 transition-all"
                             title="Sign out of admin"
                         >
                             <LogOut size={14} />
@@ -1347,6 +1462,117 @@ const AdminDashboard = () => {
                     </div>
                 )}
             </div>
+
+            {/* ========================================================================= */}
+            {/* IN-CODE SYSTEM: Change Admin Password Modal */}
+            {/* ========================================================================= */}
+            {showPasswordModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-gray-900 border border-gray-800 rounded-2xl max-w-md w-full p-6 sm:p-8 shadow-2xl relative">
+                        <button 
+                            onClick={() => setShowPasswordModal(false)}
+                            className="absolute top-5 right-5 text-gray-400 hover:text-white p-1 rounded-lg hover:bg-gray-800 transition-colors"
+                        >
+                            <X size={20} />
+                        </button>
+
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="p-2.5 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-yellow-500">
+                                <KeyRound size={22} />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-black text-white">Change Admin Password</h3>
+                                <p className="text-xs text-gray-400">Update the Firebase authentication password</p>
+                            </div>
+                        </div>
+
+                        {passwordModalError && (
+                            <div className="mb-4 bg-rose-500/10 border border-rose-500/30 text-rose-300 p-3 rounded-xl text-xs flex items-center gap-2">
+                                <AlertCircle size={16} className="shrink-0 text-rose-400" />
+                                <span>{passwordModalError}</span>
+                            </div>
+                        )}
+
+                        {passwordModalSuccess && (
+                            <div className="mb-4 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 p-3 rounded-xl text-xs flex items-center gap-2">
+                                <Check size={16} className="shrink-0 text-emerald-400" />
+                                <span>{passwordModalSuccess}</span>
+                            </div>
+                        )}
+
+                        <form onSubmit={handleChangePasswordSubmit} className="space-y-4">
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-gray-300 uppercase tracking-wider">
+                                    Current Password (Optional if recent)
+                                </label>
+                                <input
+                                    type={showNewPassword ? 'text' : 'password'}
+                                    value={currentPassword}
+                                    onChange={(e) => setCurrentPassword(e.target.value)}
+                                    placeholder="Enter current password if prompted"
+                                    className="w-full bg-gray-950 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-yellow-500 focus:outline-none"
+                                />
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-bold text-gray-300 uppercase tracking-wider">
+                                        New Password
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowNewPassword(!showNewPassword)}
+                                        className="text-xs text-gray-400 hover:text-white flex items-center gap-1"
+                                    >
+                                        {showNewPassword ? <EyeOff size={12} /> : <Eye size={12} />}
+                                        <span>{showNewPassword ? 'Hide' : 'Show'}</span>
+                                    </button>
+                                </div>
+                                <input
+                                    type={showNewPassword ? 'text' : 'password'}
+                                    value={newPassword}
+                                    onChange={(e) => setNewPassword(e.target.value)}
+                                    placeholder="Minimum 8 characters"
+                                    className="w-full bg-gray-950 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-yellow-500 focus:outline-none"
+                                    required
+                                />
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-gray-300 uppercase tracking-wider">
+                                    Confirm New Password
+                                </label>
+                                <input
+                                    type={showNewPassword ? 'text' : 'password'}
+                                    value={confirmNewPassword}
+                                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                                    placeholder="Re-enter new password"
+                                    className="w-full bg-gray-950 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-yellow-500 focus:outline-none"
+                                    required
+                                />
+                            </div>
+
+                            <div className="pt-2 flex gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPasswordModal(false)}
+                                    className="flex-1 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-bold rounded-xl transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={passwordModalSubmitting}
+                                    className="flex-1 px-4 py-2.5 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black text-sm font-black rounded-xl transition-all shadow-lg shadow-yellow-500/20 flex items-center justify-center gap-2 disabled:opacity-50"
+                                >
+                                    {passwordModalSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+                                    <span>{passwordModalSubmitting ? 'Updating...' : 'Update Password'}</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
