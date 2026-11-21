@@ -5,15 +5,39 @@ import axios from 'axios';
 
 export default function LeaderboardTable({ tournamentId, tournamentCategory, currentPlayerTag }) {
   const [leaderboard, setLeaderboard] = useState([]);
+  const [teamsMap, setTeamsMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
 
+  // Real-time listener for registered teams to map Discord usernames
   useEffect(() => {
     if (!tournamentId) return;
 
-    // Real-time Firestore subscription: updates instantly!
-    const unsubscribe = db
+    const unsubscribeTeams = db
+      .collection('tournaments')
+      .doc(tournamentId)
+      .collection('teams')
+      .onSnapshot((snapshot) => {
+        const map = {};
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data.playerTag) {
+            const clean = data.playerTag.toUpperCase().replace(/[^0-9A-Z]/g, '');
+            map[clean] = data.discordUsername || data.discordId || data.teamName || data.brawlStarsName;
+          }
+        });
+        setTeamsMap(map);
+      }, (err) => console.error('Teams map error:', err));
+
+    return () => unsubscribeTeams();
+  }, [tournamentId]);
+
+  // Real-time Firestore subscription: updates instantly!
+  useEffect(() => {
+    if (!tournamentId) return;
+
+    const unsubscribeLeaderboard = db
       .collection('tournaments')
       .doc(tournamentId)
       .collection('leaderboard')
@@ -28,8 +52,39 @@ export default function LeaderboardTable({ tournamentId, tournamentCategory, cur
         setLoading(false);
       });
 
-    return () => unsubscribe();
+    return () => unsubscribeLeaderboard();
   }, [tournamentId]);
+
+  // Helper: Display Discord username on top, Supercell tag on bottom (no duplicate)
+  const getPlayerDisplayName = (row) => {
+    if (!row) return 'Player';
+    // 1. Direct discordUsername on row
+    if (row.discordUsername && !row.discordUsername.startsWith('#')) {
+      return row.discordUsername;
+    }
+    // 2. Lookup in teams map by clean player tag
+    const cleanTag = (row.playerTag || row.id || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+    if (cleanTag && teamsMap[cleanTag] && !teamsMap[cleanTag].startsWith('#')) {
+      return teamsMap[cleanTag];
+    }
+    // 3. Current logged-in user profile if it's the current player
+    const isMe = currentPlayerTag && cleanTag === currentPlayerTag.toUpperCase().replace(/[^0-9A-Z]/g, '');
+    if (isMe) {
+      try {
+        const cached = localStorage.getItem('discordUser');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed?.username) return parsed.username;
+        }
+      } catch (e) {}
+    }
+    // 4. Row playerName (only if it is NOT simply the player tag!)
+    if (row.playerName && row.playerName !== row.playerTag && !row.playerName.startsWith('#')) {
+      return row.playerName;
+    }
+    // 5. Fallback only if no Discord data exists
+    return row.playerTag || 'Player';
+  };
 
   const handleSync = async () => {
     if (!currentPlayerTag || syncing) return;
@@ -108,7 +163,7 @@ export default function LeaderboardTable({ tournamentId, tournamentCategory, cur
             <thead className="text-xs uppercase bg-slate-950/40 text-slate-400 font-bold border-b border-slate-800">
               <tr>
                 <th className="py-3 px-4 text-center w-16">Rank</th>
-                <th className="py-3 px-4">Player Tag</th>
+                <th className="py-3 px-4">Player</th>
                 <th className="py-3 px-4 text-center">Matches Tracked</th>
                 <th className="py-3 px-4 text-right">Cumulative Points</th>
               </tr>
@@ -116,7 +171,7 @@ export default function LeaderboardTable({ tournamentId, tournamentCategory, cur
             <tbody className="divide-y divide-slate-800/60 text-sm">
               {leaderboard.map((row, index) => {
                 const rank = index + 1;
-                const isMe = currentPlayerTag && row.playerTag.toUpperCase() === currentPlayerTag.toUpperCase();
+                const isMe = currentPlayerTag && row.playerTag?.toUpperCase() === currentPlayerTag.toUpperCase();
 
                 return (
                   <tr
@@ -144,12 +199,15 @@ export default function LeaderboardTable({ tournamentId, tournamentCategory, cur
                     </td>
                     <td className="py-4 px-4">
                       <div className="font-bold flex items-center gap-2">
-                        <span className="font-mono text-slate-200">{row.playerTag}</span>
+                        <span className="font-bold text-white">{getPlayerDisplayName(row)}</span>
                         {isMe && (
                           <span className="text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded font-mono font-bold">
                             YOU
                           </span>
                         )}
+                      </div>
+                      <div className="text-xs font-mono text-slate-400 mt-0.5">
+                        {row.playerTag}
                       </div>
                     </td>
                     <td className="py-4 px-4 text-center font-mono text-slate-300">
