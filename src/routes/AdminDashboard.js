@@ -128,10 +128,14 @@ const AdminDashboard = () => {
         try {
             const res = await axios.post('/api/admin/auth', { secretKey: key.trim() });
             if (res.data && res.data.success) {
-                // Securely sign in to Firebase Auth using server-provided auth credential
-                if (res.data.authPayload) {
-                    const rawPassword = window.atob(res.data.authPayload);
-                    await auth.signInWithEmailAndPassword(res.data.email, rawPassword);
+                // Securely sign in to Firebase Auth using server-provided auth credential if matching
+                if (res.data.authPayload && (!auth.currentUser || auth.currentUser.email !== res.data.email)) {
+                    try {
+                        const rawPassword = window.atob(res.data.authPayload);
+                        await auth.signInWithEmailAndPassword(res.data.email, rawPassword);
+                    } catch (fbErr) {
+                        console.warn('Note: Using server-verified admin session token.');
+                    }
                 }
                 sessionStorage.setItem('r7_admin_token', res.data.sessionToken);
                 scrubUrlParams();
