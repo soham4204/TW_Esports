@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Tournaments collection: Public read, restricted write
+    match /tournaments/{tournamentId} {
+      allow read: if true;
+      // Only r7esports@gmail.com can create, edit, or delete tournaments
+      allow write: if request.auth != null && request.auth.token.email == 'r7esports@gmail.com';
+
+      // Registered teams: Players can register themselves; admin can manage all
+      match /teams/{teamId} {
+        allow read: if true;
+        allow write: if request.auth != null && (request.auth.uid == teamId || request.auth.token.email == 'r7esports@gmail.com');
+      }
+
+      // Leaderboard entries: Only admin or backend can modify
+      match /leaderboard/{playerTag} {
+        allow read: if true;
+        allow write: if request.auth != null && request.auth.token.email == 'r7esports@gmail.com';
+      }
+
+      // Match logs: Only admin or backend can modify
+      match /battle_logs/{battleId} {
+        allow read: if true;
+        allow write: if request.auth != null && request.auth.token.email == 'r7esports@gmail.com';
+      }
+    }
+    
+    // User profiles: Users can only edit their own profile
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == userId;
+
+      match /myTournaments/{tournamentId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+  }
+}
