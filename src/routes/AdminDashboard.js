@@ -521,6 +521,26 @@ const AdminDashboard = () => {
         ]);
     };
 
+    const getAdminPlayerDisplayName = (player) => {
+        if (!player) return 'Player';
+        if (player.discordUsername && !player.discordUsername.startsWith('#')) {
+            return player.discordUsername;
+        }
+        const cleanTag = (player.playerTag || player.id || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+        const currentTeams = selectedTournament ? (teams[selectedTournament.id] || []) : [];
+        const matched = currentTeams.find(t => {
+            const tTag = (t.playerTag || t.player1Id || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+            return tTag === cleanTag;
+        });
+        if (matched && (matched.discordUsername || matched.teamName) && !(matched.discordUsername || matched.teamName).startsWith('#')) {
+            return matched.discordUsername || matched.teamName;
+        }
+        if (player.playerName && player.playerName !== player.playerTag && !player.playerName.startsWith('#')) {
+            return player.playerName;
+        }
+        return player.playerTag || 'Player';
+    };
+
     // Force Sync an Individual Player's Matches
     const handleForceSyncPlayer = async (tournamentId, playerTag) => {
         if (!tournamentId || !playerTag) return;
@@ -1381,8 +1401,8 @@ const AdminDashboard = () => {
                                                                 #{idx + 1}
                                                             </td>
                                                             <td className="py-3 px-4">
-                                                                <div className="font-bold text-white">{player.playerName || 'Player'}</div>
-                                                                <div className="text-xs font-mono text-yellow-500">{tag}</div>
+                                                                <div className="font-bold text-white">{getAdminPlayerDisplayName(player)}</div>
+                                                                <div className="text-xs font-mono text-slate-400">{tag}</div>
                                                             </td>
                                                             <td className="py-3 px-4 text-center font-semibold text-gray-300">
                                                                 {player.matchesPlayed || 0}
