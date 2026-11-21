@@ -46,6 +46,7 @@ const TournamentOverview = () => {
 
     // Leaderboard state
     const [leaderboard, setLeaderboard] = useState([]);
+    const [teamsMap, setTeamsMap] = useState({});
     const [syncing, setSyncing] = useState(false);
     const [syncMsg, setSyncMsg] = useState('');
 
@@ -98,7 +99,18 @@ const TournamentOverview = () => {
         fetchTournament();
 
         const unsubscribeTeams = db.collection('tournaments').doc(id).collection('teams')
-            .onSnapshot(snap => setRegisteredTeams(snap.size), err => console.error(err));
+            .onSnapshot(snap => {
+                setRegisteredTeams(snap.size);
+                const map = {};
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    if (data.playerTag) {
+                        const clean = data.playerTag.toUpperCase().replace(/[^0-9A-Z]/g, '');
+                        map[clean] = data.discordUsername || data.discordId || data.teamName || data.brawlStarsName;
+                    }
+                });
+                setTeamsMap(map);
+            }, err => console.error(err));
 
         // Real-time Leaderboard Listener
         const unsubscribeLeaderboard = db.collection('tournaments').doc(id).collection('leaderboard')
@@ -149,6 +161,26 @@ const TournamentOverview = () => {
         return () => unsubscribeMatches();
     }, [brawlStarsTag, id]);
 
+    // Get formatted display name: Discord username on top, not Supercell tag
+    const getPlayerDisplayName = (row) => {
+        if (!row) return 'Player';
+        if (row.discordUsername && !row.discordUsername.startsWith('#')) {
+            return row.discordUsername;
+        }
+        const cleanTag = (row.playerTag || row.id || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+        if (cleanTag && teamsMap[cleanTag] && !teamsMap[cleanTag].startsWith('#')) {
+            return teamsMap[cleanTag];
+        }
+        const isMe = brawlStarsTag && cleanTag === brawlStarsTag.toUpperCase().replace(/[^0-9A-Z]/g, '');
+        if (isMe && discordProfile?.username) {
+            return discordProfile.username;
+        }
+        if (row.playerName && row.playerName !== row.playerTag && !row.playerName.startsWith('#')) {
+            return row.playerName;
+        }
+        return row.playerTag || 'Player';
+    };
+
     // Handle Join Tournament
     const handleRegister = async () => {
         if (!user || !discordProfile) {
@@ -177,7 +209,9 @@ const TournamentOverview = () => {
 
             await db.collection('tournaments').doc(id).collection('leaderboard').doc(brawlStarsTag).set({
                 playerTag: brawlStarsTag,
-                playerName: brawlStarsName || discordProfile.username,
+                playerName: discordProfile.username || brawlStarsName,
+                discordUsername: discordProfile.username,
+                discordId: discordProfile.discordId || null,
                 totalScore: 0,
                 matchesPlayed: 0,
                 lastSyncedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -477,7 +511,7 @@ const TournamentOverview = () => {
                                         2
                                     </div>
                                     <p className="text-xs uppercase font-bold text-slate-400 tracking-wider">2nd Place</p>
-                                    <p className="text-lg font-black text-white truncate mt-1">{top2?.playerName || top2?.playerTag || '-'}</p>
+                                    <p className="text-lg font-black text-white truncate mt-1">{top2 ? getPlayerDisplayName(top2) : '-'}</p>
                                     <p className="text-xs font-mono text-slate-400">{top2?.playerTag}</p>
                                     <div className="mt-3 bg-slate-950 py-2 px-3 rounded-xl border border-slate-800">
                                         <span className="text-xl font-black font-mono text-slate-200">{(top2?.totalScore || 0).toLocaleString()}</span>
@@ -492,7 +526,7 @@ const TournamentOverview = () => {
                                         👑
                                     </div>
                                     <p className="text-xs uppercase font-black text-yellow-400 tracking-widest">1st Champion</p>
-                                    <p className="text-xl font-black text-white truncate mt-1">{top1?.playerName || top1?.playerTag || 'Leader'}</p>
+                                    <p className="text-xl font-black text-white truncate mt-1">{top1 ? getPlayerDisplayName(top1) : 'Leader'}</p>
                                     <p className="text-xs font-mono text-yellow-400/80">{top1?.playerTag}</p>
                                     <div className="mt-3 bg-slate-950 py-2.5 px-3 rounded-xl border border-yellow-500/30">
                                         <span className="text-2xl font-black font-mono text-yellow-400">{(top1?.totalScore || 0).toLocaleString()}</span>
@@ -507,7 +541,7 @@ const TournamentOverview = () => {
                                         3
                                     </div>
                                     <p className="text-xs uppercase font-bold text-amber-500 tracking-wider">3rd Place</p>
-                                    <p className="text-lg font-black text-white truncate mt-1">{top3?.playerName || top3?.playerTag || '-'}</p>
+                                    <p className="text-lg font-black text-white truncate mt-1">{top3 ? getPlayerDisplayName(top3) : '-'}</p>
                                     <p className="text-xs font-mono text-slate-400">{top3?.playerTag}</p>
                                     <div className="mt-3 bg-slate-950 py-2 px-3 rounded-xl border border-slate-800">
                                         <span className="text-xl font-black font-mono text-amber-500">{(top3?.totalScore || 0).toLocaleString()}</span>
@@ -567,12 +601,12 @@ const TournamentOverview = () => {
                                                         </td>
                                                         <td className="py-4 px-4">
                                                             <div className="font-bold flex items-center gap-2">
-                                                                <span>{row.playerName || row.playerTag}</span>
+                                                                <span className="font-bold text-white">{getPlayerDisplayName(row)}</span>
                                                                 {isMe && (
                                                                     <span className="text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded font-mono font-bold">YOU</span>
                                                                 )}
                                                             </div>
-                                                            <div className="text-xs font-mono text-slate-500">{row.playerTag}</div>
+                                                            <div className="text-xs font-mono text-slate-400">{row.playerTag}</div>
                                                         </td>
                                                         <td className="py-4 px-4 text-center font-mono text-slate-300">
                                                             {row.matchesPlayed || 0}
