@@ -120,14 +120,36 @@ module.exports = async (req, res) => {
       newMatchesCount += 1;
     }
 
-    // Update Leaderboard document with cumulative score
+    // Update Leaderboard document with cumulative score and registered Discord data
     const leaderboardRef = db.collection('tournaments').doc(tournamentId).collection('leaderboard').doc(formattedTag);
-    batch.set(leaderboardRef, {
+
+    let discordUsername = null;
+    try {
+      const teamsSnap = await db.collection('tournaments').doc(tournamentId).collection('teams').get();
+      for (const tDoc of teamsSnap.docs) {
+        const tData = tDoc.data();
+        const tTag = (tData.playerTag || tData.player1Id || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+        if (tTag === cleanTag) {
+          discordUsername = tData.discordUsername || tData.teamName || null;
+          break;
+        }
+      }
+    } catch (e) {
+      console.warn('Teams lookup in sync error:', e.message);
+    }
+
+    const lbUpdate = {
       playerTag: formattedTag,
       totalScore: admin.firestore.FieldValue.increment(newlyAddedPoints),
       matchesPlayed: admin.firestore.FieldValue.increment(newMatchesCount),
       lastSyncedAt: admin.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
+    };
+    if (discordUsername) {
+      lbUpdate.discordUsername = discordUsername;
+      lbUpdate.playerName = discordUsername;
+    }
+
+    batch.set(leaderboardRef, lbUpdate, { merge: true });
 
     await batch.commit();
 
