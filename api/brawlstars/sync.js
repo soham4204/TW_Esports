@@ -124,6 +124,7 @@ module.exports = async (req, res) => {
     const leaderboardRef = db.collection('tournaments').doc(tournamentId).collection('leaderboard').doc(formattedTag);
 
     let discordUsername = null;
+    let discordId = null;
     try {
       const teamsSnap = await db.collection('tournaments').doc(tournamentId).collection('teams').get();
       for (const tDoc of teamsSnap.docs) {
@@ -131,6 +132,7 @@ module.exports = async (req, res) => {
         const tTag = (tData.playerTag || tData.player1Id || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
         if (tTag === cleanTag) {
           discordUsername = tData.discordUsername || tData.teamName || null;
+          discordId = tData.discordId || null;
           break;
         }
       }
@@ -147,6 +149,9 @@ module.exports = async (req, res) => {
     if (discordUsername) {
       lbUpdate.discordUsername = discordUsername;
       lbUpdate.playerName = discordUsername;
+    }
+    if (discordId) {
+      lbUpdate.discordId = discordId;
     }
 
     batch.set(leaderboardRef, lbUpdate, { merge: true });
