@@ -497,12 +497,71 @@ const AdminDashboard = () => {
 
     const fetchLeaderboard = async (tournamentId) => {
         try {
-            const lbSnapshot = await db.collection('tournaments').doc(tournamentId).collection('leaderboard').orderBy('totalScore', 'desc').get();
-            const lbData = lbSnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-            }));
-            setLeaderboards(prev => ({ ...prev, [tournamentId]: lbData }));
+            const [lbSnapshot, teamsSnapshot] = await Promise.all([
+                db.collection('tournaments').doc(tournamentId).collection('leaderboard').get(),
+                db.collection('tournaments').doc(tournamentId).collection('teams').get()
+            ]);
+
+            const playerMap = new Map();
+
+            // 1. First populate with all registered teams (ensures every player exists with 0 pts)
+            teamsSnapshot.docs.forEach(doc => {
+                const data = doc.data();
+                const rawTag = data.playerTag || data.player1Id || '';
+                const cleanTag = rawTag.toUpperCase().replace(/[^0-9A-Z]/g, '');
+                if (!cleanTag) return;
+                playerMap.set(cleanTag, {
+                    id: doc.id,
+                    cleanTag,
+                    playerTag: '#' + cleanTag,
+                    discordUsername: data.discordUsername || null,
+                    discordId: data.discordId || null,
+                    teamName: data.teamName || null,
+                    brawlStarsName: data.brawlStarsName || null,
+                    playerName: data.discordUsername || data.teamName || data.brawlStarsName || ('#' + cleanTag),
+                    totalScore: 0,
+                    matchesPlayed: 0
+                });
+            });
+
+            // 2. Overlay scores from leaderboard
+            lbSnapshot.docs.forEach(doc => {
+                const data = doc.data();
+                const rawTag = data.playerTag || doc.id || '';
+                const cleanTag = rawTag.toUpperCase().replace(/[^0-9A-Z]/g, '');
+                if (!cleanTag) return;
+                const existing = playerMap.get(cleanTag) || {
+                    id: doc.id,
+                    cleanTag,
+                    playerTag: '#' + cleanTag,
+                    totalScore: 0,
+                    matchesPlayed: 0
+                };
+                const score = typeof data.totalScore === 'number' ? data.totalScore : parseInt(data.totalScore || 0, 10);
+                const matches = typeof data.matchesPlayed === 'number' ? data.matchesPlayed : parseInt(data.matchesPlayed || 0, 10);
+                const discordName = (data.discordUsername && !data.discordUsername.startsWith('#'))
+                    ? data.discordUsername
+                    : existing.discordUsername;
+
+                playerMap.set(cleanTag, {
+                    ...existing,
+                    ...data,
+                    cleanTag,
+                    playerTag: '#' + cleanTag,
+                    discordUsername: discordName,
+                    discordId: data.discordId || existing.discordId,
+                    totalScore: isNaN(score) ? 0 : score,
+                    matchesPlayed: isNaN(matches) ? 0 : matches
+                });
+            });
+
+            const merged = Array.from(playerMap.values()).sort((a, b) => {
+                if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+                if (b.matchesPlayed !== a.matchesPlayed) return b.matchesPlayed - a.matchesPlayed;
+                return (a.cleanTag || '').localeCompare(b.cleanTag || '');
+            });
+
+            setLeaderboards(prev => ({ ...prev, [tournamentId]: merged }));
         } catch (error) {
             console.error('Error fetching leaderboard: ', error);
         }
@@ -526,15 +585,22 @@ const AdminDashboard = () => {
         if (player.discordUsername && !player.discordUsername.startsWith('#')) {
             return player.discordUsername;
         }
-        const cleanTag = (player.playerTag || player.id || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+        const cleanTag = (player.playerTag || player.id || player.cleanTag || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
         const currentTeams = selectedTournament ? (teams[selectedTournament.id] || []) : [];
         const matched = currentTeams.find(t => {
             const tTag = (t.playerTag || t.player1Id || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
             return tTag === cleanTag;
         });
-        if (matched && (matched.discordUsername || matched.teamName) && !(matched.discordUsername || matched.teamName).startsWith('#')) {
-            return matched.discordUsername || matched.teamName;
+        if (matched && matched.discordUsername && !matched.discordUsername.startsWith('#')) {
+            return matched.discordUsername;
         }
+        if (player.discordId) return player.discordId;
+        if (matched?.discordId) return matched.discordId;
+        if (matched && matched.teamName && !matched.teamName.startsWith('#')) {
+            return matched.teamName;
+        }
+        if (player.teamName && !player.teamName.startsWith('#')) return player.teamName;
+        if (player.brawlStarsName && !player.brawlStarsName.startsWith('#')) return player.brawlStarsName;
         if (player.playerName && player.playerName !== player.playerTag && !player.playerName.startsWith('#')) {
             return player.playerName;
         }
