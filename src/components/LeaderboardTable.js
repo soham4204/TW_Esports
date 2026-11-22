@@ -4,13 +4,15 @@ import { Trophy, RefreshCw, Swords } from 'lucide-react';
 import axios from 'axios';
 
 export default function LeaderboardTable({ tournamentId, tournamentCategory, currentPlayerTag }) {
+  const [rawTeams, setRawTeams] = useState([]);
+  const [rawScores, setRawScores] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
   const [teamsMap, setTeamsMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
 
-  // Real-time listener for registered teams to map Discord usernames
+  // Real-time listener for ALL registered teams
   useEffect(() => {
     if (!tournamentId) return;
 
@@ -19,43 +21,125 @@ export default function LeaderboardTable({ tournamentId, tournamentCategory, cur
       .doc(tournamentId)
       .collection('teams')
       .onSnapshot((snapshot) => {
+        const list = [];
         const map = {};
         snapshot.forEach((doc) => {
           const data = doc.data();
-          if (data.playerTag) {
-            const clean = data.playerTag.toUpperCase().replace(/[^0-9A-Z]/g, '');
-            map[clean] = data.discordUsername || data.discordId || data.teamName || data.brawlStarsName;
+          list.push({ id: doc.id, ...data });
+          const rawTag = data.playerTag || data.player1Id || '';
+          if (rawTag) {
+            const clean = rawTag.toUpperCase().replace(/[^0-9A-Z]/g, '');
+            map[clean] = data;
           }
         });
         setTeamsMap(map);
+        setRawTeams(list);
       }, (err) => console.error('Teams map error:', err));
 
-    return () => unsubscribeTeams();
-  }, [tournamentId]);
-
-  // Real-time Firestore subscription: updates instantly!
-  useEffect(() => {
-    if (!tournamentId) return;
-
+    // Real-time listener for leaderboard score documents
     const unsubscribeLeaderboard = db
       .collection('tournaments')
       .doc(tournamentId)
       .collection('leaderboard')
-      .orderBy('totalScore', 'desc')
       .onSnapshot((snapshot) => {
         const rows = [];
         snapshot.forEach((doc) => rows.push({ id: doc.id, ...doc.data() }));
-        setLeaderboard(rows);
+        setRawScores(rows);
         setLoading(false);
       }, (err) => {
         console.error('Leaderboard error:', err);
         setLoading(false);
       });
 
-    return () => unsubscribeLeaderboard();
+    return () => {
+      unsubscribeTeams();
+      unsubscribeLeaderboard();
+    };
   }, [tournamentId]);
 
-  // Helper: Display Discord username on top, Supercell tag on bottom (no duplicate)
+  // Merge registered teams with leaderboard scores: ensures EVERY registered player appears!
+  useEffect(() => {
+    const playerMap = new Map();
+
+    // 1. Seed with ALL registered players from teams (0 points by default)
+    rawTeams.forEach((team) => {
+      const rawTag = team.playerTag || team.player1Id || '';
+      const cleanTag = rawTag.toUpperCase().replace(/[^0-9A-Z]/g, '');
+      if (!cleanTag) return;
+
+      const formattedTag = '#' + cleanTag;
+      playerMap.set(cleanTag, {
+        id: team.id || cleanTag,
+        cleanTag,
+        playerTag: formattedTag,
+        discordUsername: team.discordUsername || null,
+        discordId: team.discordId || null,
+        teamName: team.teamName || null,
+        brawlStarsName: team.brawlStarsName || null,
+        playerName: team.discordUsername || team.teamName || team.brawlStarsName || formattedTag,
+        totalScore: 0,
+        matchesPlayed: 0,
+        registeredAt: team.registeredAt || null
+      });
+    });
+
+    // 2. Merge score documents from leaderboard
+    rawScores.forEach((entry) => {
+      const rawTag = entry.playerTag || entry.id || '';
+      const cleanTag = rawTag.toUpperCase().replace(/[^0-9A-Z]/g, '');
+      if (!cleanTag) return;
+
+      const existing = playerMap.get(cleanTag) || {
+        id: entry.id || cleanTag,
+        cleanTag,
+        playerTag: '#' + cleanTag,
+        discordUsername: null,
+        discordId: null,
+        teamName: null,
+        brawlStarsName: null,
+        playerName: '#' + cleanTag,
+        totalScore: 0,
+        matchesPlayed: 0,
+        registeredAt: null
+      };
+
+      const score = typeof entry.totalScore === 'number' 
+        ? entry.totalScore 
+        : parseInt(entry.totalScore || 0, 10);
+      const matches = typeof entry.matchesPlayed === 'number' 
+        ? entry.matchesPlayed 
+        : parseInt(entry.matchesPlayed || 0, 10);
+
+      const discordName = (entry.discordUsername && !entry.discordUsername.startsWith('#'))
+        ? entry.discordUsername
+        : existing.discordUsername;
+
+      playerMap.set(cleanTag, {
+        ...existing,
+        ...entry,
+        cleanTag,
+        playerTag: '#' + cleanTag,
+        discordUsername: discordName,
+        discordId: entry.discordId || existing.discordId,
+        teamName: entry.teamName || existing.teamName,
+        brawlStarsName: entry.brawlStarsName || existing.brawlStarsName,
+        totalScore: isNaN(score) ? 0 : score,
+        matchesPlayed: isNaN(matches) ? 0 : matches,
+        lastSyncedAt: entry.lastSyncedAt || existing.lastSyncedAt || null
+      });
+    });
+
+    // 3. Sort by totalScore desc, then matchesPlayed desc, then tag asc
+    const sorted = Array.from(playerMap.values()).sort((a, b) => {
+      if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+      if (b.matchesPlayed !== a.matchesPlayed) return b.matchesPlayed - a.matchesPlayed;
+      return (a.cleanTag || '').localeCompare(b.cleanTag || '');
+    });
+
+    setLeaderboard(sorted);
+  }, [rawTeams, rawScores]);
+
+  // Helper: Display Discord username on top in bold white, no duplicate player tag
   const getPlayerDisplayName = (row) => {
     if (!row) return 'Player';
     // 1. Direct discordUsername on row
@@ -63,11 +147,16 @@ export default function LeaderboardTable({ tournamentId, tournamentCategory, cur
       return row.discordUsername;
     }
     // 2. Lookup in teams map by clean player tag
-    const cleanTag = (row.playerTag || row.id || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
-    if (cleanTag && teamsMap[cleanTag] && !teamsMap[cleanTag].startsWith('#')) {
-      return teamsMap[cleanTag];
+    const cleanTag = (row.playerTag || row.id || row.cleanTag || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+    const team = teamsMap[cleanTag];
+    if (team?.discordUsername && !team.discordUsername.startsWith('#')) {
+      return team.discordUsername;
     }
-    // 3. Current logged-in user profile if it's the current player
+    // 3. Fallback to Discord ID
+    if (row.discordId) return row.discordId;
+    if (team?.discordId) return team.discordId;
+
+    // 4. Current logged-in user profile if it's the current player
     const isMe = currentPlayerTag && cleanTag === currentPlayerTag.toUpperCase().replace(/[^0-9A-Z]/g, '');
     if (isMe) {
       try {
@@ -78,11 +167,16 @@ export default function LeaderboardTable({ tournamentId, tournamentCategory, cur
         }
       } catch (e) {}
     }
-    // 4. Row playerName (only if it is NOT simply the player tag!)
-    if (row.playerName && row.playerName !== row.playerTag && !row.playerName.startsWith('#')) {
+
+    // 5. Team name / in-game name (if not a tag)
+    if (row.teamName && !row.teamName.startsWith('#')) return row.teamName;
+    if (team?.teamName && !team.teamName.startsWith('#')) return team.teamName;
+    if (row.brawlStarsName && !row.brawlStarsName.startsWith('#')) return row.brawlStarsName;
+    if (row.playerName && !row.playerName.startsWith('#') && row.playerName !== row.playerTag) {
       return row.playerName;
     }
-    // 5. Fallback only if no Discord data exists
+
+    // 6. Only fallback to playerTag if no other info exists
     return row.playerTag || 'Player';
   };
 
@@ -128,7 +222,7 @@ export default function LeaderboardTable({ tournamentId, tournamentCategory, cur
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Full cumulative tracking: Every match played during tournament window adds points!
+            Showing all registered players. Cumulative points from tournament matches.
           </p>
         </div>
 
@@ -155,7 +249,7 @@ export default function LeaderboardTable({ tournamentId, tournamentCategory, cur
         <div className="p-12 text-center text-slate-500">Loading live standings...</div>
       ) : leaderboard.length === 0 ? (
         <div className="p-12 text-center text-slate-500">
-          No matches recorded yet. Play games in Brawl Stars and click "Sync My Score"!
+          No players registered yet.
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -175,7 +269,7 @@ export default function LeaderboardTable({ tournamentId, tournamentCategory, cur
 
                 return (
                   <tr
-                    key={row.id}
+                    key={row.id || row.playerTag}
                     className={`hover:bg-slate-800/40 transition ${
                       isMe ? 'bg-blue-600/10 border-l-4 border-blue-500' : ''
                     }`}
@@ -198,7 +292,7 @@ export default function LeaderboardTable({ tournamentId, tournamentCategory, cur
                       )}
                     </td>
                     <td className="py-4 px-4">
-                      <div className="font-bold flex items-center gap-2">
+                      <div className="flex items-center gap-2">
                         <span className="font-bold text-white">{getPlayerDisplayName(row)}</span>
                         {isMe && (
                           <span className="text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded font-mono font-bold">
