@@ -90,6 +90,12 @@ const AdminDashboard = () => {
     const [syncingPlayer, setSyncingPlayer] = useState(null);
     const [syncStatusMsg, setSyncStatusMsg] = useState('');
 
+    // Player Match History Modal State
+    const [historyPlayer, setHistoryPlayer] = useState(null);
+    const [playerMatches, setPlayerMatches] = useState([]);
+    const [loadingMatches, setLoadingMatches] = useState(false);
+    const [historyError, setHistoryError] = useState('');
+
     const CLOUDINARY_UPLOAD_PRESET = "R7Esports"; 
     const CLOUDINARY_CLOUD_NAME = "dihawgvdz";
 
@@ -667,6 +673,79 @@ const AdminDashboard = () => {
         setSyncStatusMsg('');
         setSuccessMessage(`✅ Force sync complete! ${currentLb.length} players updated (+${totalPtsAdded} pts, ${totalNewMatches} new matches)`);
         setTimeout(() => setSuccessMessage(''), 6000);
+    };
+
+    // Format Battle Timestamp from Supercell YYYYMMDDTHHMMSS.000Z format
+    const formatBattleTime = (timeStr) => {
+        if (!timeStr) return 'N/A';
+        const match = timeStr.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/);
+        if (!match) return timeStr;
+        const d = new Date(Date.UTC(+match[1], +match[2] - 1, +match[3], +match[4], +match[5], +match[6]));
+        return d.toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+    };
+
+    // Fetch All Match History for a Given Player in the Selected Tournament
+    const fetchPlayerMatchHistory = async (tournamentId, player) => {
+        if (!tournamentId || !player) return;
+        setHistoryPlayer(player);
+        setLoadingMatches(true);
+        setHistoryError('');
+        setPlayerMatches([]);
+
+        const rawTag = player.playerTag || player.player1Id || player.id || '';
+        const cleanTag = rawTag.toUpperCase().replace(/[^0-9A-Z]/g, '');
+
+        try {
+            const snap = await db
+                .collection('tournaments')
+                .doc(tournamentId)
+                .collection('battle_logs')
+                .get();
+
+            const matches = [];
+            snap.forEach(doc => {
+                const data = doc.data();
+                const pTag = (data.playerTag || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+                if (pTag === cleanTag || doc.id.startsWith(cleanTag + '_')) {
+                    matches.push({
+                        id: doc.id,
+                        ...data,
+                        score: typeof data.score === 'number' ? data.score : parseInt(data.score || 0, 10)
+                    });
+                }
+            });
+
+            // Sort reverse chronological: most recent matches first
+            matches.sort((a, b) => {
+                const timeA = a.battleTime || '';
+                const timeB = b.battleTime || '';
+                if (timeB !== timeA) return timeB.localeCompare(timeA);
+                const recA = a.recordedAt?.seconds || 0;
+                const recB = b.recordedAt?.seconds || 0;
+                return recB - recA;
+            });
+
+            setPlayerMatches(matches);
+        } catch (err) {
+            console.error('Error fetching player match history:', err);
+            setHistoryError('Failed to load match history: ' + (err.message || 'Unknown error'));
+        } finally {
+            setLoadingMatches(false);
+        }
+    };
+
+    // Handle Quick Sync from within the Match History Modal
+    const handleSyncHistoryPlayer = async () => {
+        if (!selectedTournament || !historyPlayer) return;
+        const tag = historyPlayer.playerTag || historyPlayer.id;
+        await handleForceSyncPlayer(selectedTournament.id, tag);
+        await fetchPlayerMatchHistory(selectedTournament.id, historyPlayer);
     };
 
     // =========================================================================
@@ -1470,8 +1549,15 @@ const AdminDashboard = () => {
                                                                 <div className="font-bold text-white">{getAdminPlayerDisplayName(player)}</div>
                                                                 <div className="text-xs font-mono text-slate-400">{tag}</div>
                                                             </td>
-                                                            <td className="py-3 px-4 text-center font-semibold text-gray-300">
-                                                                {player.matchesPlayed || 0}
+                                                            <td className="py-3 px-4 text-center">
+                                                                <button
+                                                                    onClick={() => fetchPlayerMatchHistory(selectedTournament.id, player)}
+                                                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-800/80 hover:bg-indigo-600/20 text-gray-300 hover:text-indigo-300 rounded-lg text-xs font-mono font-bold border border-gray-700/60 hover:border-indigo-500/40 transition-all cursor-pointer"
+                                                                    title="Click to view match history"
+                                                                >
+                                                                    <Eye size={12} className="text-indigo-400" />
+                                                                    <span>{player.matchesPlayed || 0}</span>
+                                                                </button>
                                                             </td>
                                                             <td className="py-3 px-4 text-right">
                                                                 <span className="text-base font-black text-yellow-400">
@@ -1480,14 +1566,25 @@ const AdminDashboard = () => {
                                                                 <span className="text-xs text-gray-500 ml-1">pts</span>
                                                             </td>
                                                             <td className="py-3 px-4 text-center">
-                                                                <button
-                                                                    onClick={() => handleForceSyncPlayer(selectedTournament.id, tag)}
-                                                                    disabled={syncingPlayer !== null}
-                                                                    className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-xs font-bold text-indigo-300 rounded-lg border border-gray-700 transition-all flex items-center justify-center gap-1.5 mx-auto disabled:opacity-50"
-                                                                >
-                                                                    <RefreshCw size={12} className={isPlayerSyncing ? 'animate-spin' : ''} />
-                                                                    <span>{isPlayerSyncing ? 'Syncing...' : 'Sync Score'}</span>
-                                                                </button>
+                                                                <div className="flex items-center justify-center gap-2">
+                                                                    <button
+                                                                        onClick={() => fetchPlayerMatchHistory(selectedTournament.id, player)}
+                                                                        className="px-2.5 py-1.5 bg-indigo-600/15 hover:bg-indigo-600/25 text-xs font-bold text-indigo-300 rounded-lg border border-indigo-500/30 hover:border-indigo-500/50 transition-all flex items-center justify-center gap-1.5"
+                                                                        title="View player match history"
+                                                                    >
+                                                                        <Eye size={12} />
+                                                                        <span>Matches</span>
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleForceSyncPlayer(selectedTournament.id, tag)}
+                                                                        disabled={syncingPlayer !== null}
+                                                                        className="px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-xs font-bold text-gray-300 hover:text-white rounded-lg border border-gray-700 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                                                        title="Sync latest matches from Supercell API"
+                                                                    >
+                                                                        <RefreshCw size={12} className={isPlayerSyncing ? 'animate-spin' : ''} />
+                                                                        <span>{isPlayerSyncing ? 'Syncing...' : 'Sync'}</span>
+                                                                    </button>
+                                                                </div>
                                                             </td>
                                                         </tr>
                                                     );
@@ -1522,23 +1619,65 @@ const AdminDashboard = () => {
                                                 </summary>
                                                 <div className="p-4 border-t border-gray-800 bg-gray-900/60 space-y-3 text-sm">
                                                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                                                        <div className="p-3 bg-gray-950/60 rounded-lg border border-gray-800">
-                                                            <p className="text-xs text-indigo-400 font-bold uppercase tracking-wider mb-1">Player 1</p>
-                                                            <p className="font-semibold text-white">{team.player1InGameName || team.brawlStarsName || team.discordUsername || 'Player'}</p>
-                                                            <p className="text-xs font-mono text-gray-400">{team.player1Id || team.playerTag || 'N/A'}</p>
+                                                        <div className="p-3 bg-gray-950/60 rounded-lg border border-gray-800 flex items-center justify-between">
+                                                            <div>
+                                                                <p className="text-xs text-indigo-400 font-bold uppercase tracking-wider mb-1">Player 1</p>
+                                                                <p className="font-semibold text-white">{team.player1InGameName || team.brawlStarsName || team.discordUsername || 'Player'}</p>
+                                                                <p className="text-xs font-mono text-gray-400">{team.player1Id || team.playerTag || 'N/A'}</p>
+                                                            </div>
+                                                            {(team.playerTag || team.player1Id) && (
+                                                                <button
+                                                                    onClick={() => fetchPlayerMatchHistory(selectedTournament.id, {
+                                                                        playerTag: team.playerTag || team.player1Id,
+                                                                        discordUsername: team.discordUsername,
+                                                                        playerName: team.brawlStarsName || team.discordUsername
+                                                                    })}
+                                                                    className="px-2 py-1 bg-gray-800 hover:bg-indigo-600/20 text-gray-400 hover:text-indigo-300 rounded-lg border border-gray-700 transition-all flex items-center gap-1 text-xs font-bold"
+                                                                    title="View Match History"
+                                                                >
+                                                                    <Eye size={12} />
+                                                                    <span>Matches</span>
+                                                                </button>
+                                                            )}
                                                         </div>
                                                         {team.player2Id && (
-                                                            <div className="p-3 bg-gray-950/60 rounded-lg border border-gray-800">
-                                                                <p className="text-xs text-indigo-400 font-bold uppercase tracking-wider mb-1">Player 2</p>
-                                                                <p className="font-semibold text-white">{team.player2InGameName}</p>
-                                                                <p className="text-xs font-mono text-gray-400">{team.player2Id}</p>
+                                                            <div className="p-3 bg-gray-950/60 rounded-lg border border-gray-800 flex items-center justify-between">
+                                                                <div>
+                                                                    <p className="text-xs text-indigo-400 font-bold uppercase tracking-wider mb-1">Player 2</p>
+                                                                    <p className="font-semibold text-white">{team.player2InGameName}</p>
+                                                                    <p className="text-xs font-mono text-gray-400">{team.player2Id}</p>
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => fetchPlayerMatchHistory(selectedTournament.id, {
+                                                                        playerTag: team.player2Id,
+                                                                        playerName: team.player2InGameName
+                                                                    })}
+                                                                    className="px-2 py-1 bg-gray-800 hover:bg-indigo-600/20 text-gray-400 hover:text-indigo-300 rounded-lg border border-gray-700 transition-all flex items-center gap-1 text-xs font-bold"
+                                                                    title="View Match History"
+                                                                >
+                                                                    <Eye size={12} />
+                                                                    <span>Matches</span>
+                                                                </button>
                                                             </div>
                                                         )}
                                                         {team.player3Id && (
-                                                            <div className="p-3 bg-gray-950/60 rounded-lg border border-gray-800">
-                                                                <p className="text-xs text-indigo-400 font-bold uppercase tracking-wider mb-1">Player 3</p>
-                                                                <p className="font-semibold text-white">{team.player3InGameName}</p>
-                                                                <p className="text-xs font-mono text-gray-400">{team.player3Id}</p>
+                                                            <div className="p-3 bg-gray-950/60 rounded-lg border border-gray-800 flex items-center justify-between">
+                                                                <div>
+                                                                    <p className="text-xs text-indigo-400 font-bold uppercase tracking-wider mb-1">Player 3</p>
+                                                                    <p className="font-semibold text-white">{team.player3InGameName}</p>
+                                                                    <p className="text-xs font-mono text-gray-400">{team.player3Id}</p>
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => fetchPlayerMatchHistory(selectedTournament.id, {
+                                                                        playerTag: team.player3Id,
+                                                                        playerName: team.player3InGameName
+                                                                    })}
+                                                                    className="px-2 py-1 bg-gray-800 hover:bg-indigo-600/20 text-gray-400 hover:text-indigo-300 rounded-lg border border-gray-700 transition-all flex items-center gap-1 text-xs font-bold"
+                                                                    title="View Match History"
+                                                                >
+                                                                    <Eye size={12} />
+                                                                    <span>Matches</span>
+                                                                </button>
                                                             </div>
                                                         )}
                                                     </div>
@@ -1554,7 +1693,148 @@ const AdminDashboard = () => {
             </div>
 
             {/* ========================================================================= */}
-            {/* IN-CODE SYSTEM: Change Admin Password Modal */}
+            {/* PLAYER MATCH HISTORY MODAL */}
+            {/* ========================================================================= */}
+            {historyPlayer && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-gray-900 border border-gray-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl relative max-h-[85vh] flex flex-col">
+                        {/* Modal Header */}
+                        <div className="flex items-start justify-between pb-4 border-b border-gray-800">
+                            <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                        Player Match History
+                                    </span>
+                                    <span className="text-xs text-gray-400 font-mono">
+                                        {selectedTournament?.name}
+                                    </span>
+                                </div>
+                                <h3 className="text-2xl font-black text-white">
+                                    {getAdminPlayerDisplayName(historyPlayer)}
+                                </h3>
+                                <p className="text-xs font-mono text-yellow-400 mt-0.5">
+                                    {historyPlayer.playerTag || historyPlayer.id}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setHistoryPlayer(null)}
+                                className="p-2 hover:bg-gray-800 text-gray-400 hover:text-white rounded-xl transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Player Stats Ribbon inside Modal */}
+                        <div className="grid grid-cols-3 gap-3 my-4">
+                            <div className="bg-gray-950/70 border border-gray-800 rounded-xl p-3 text-center">
+                                <p className="text-[10px] uppercase font-bold text-gray-400">Total Matches</p>
+                                <p className="text-xl font-black font-mono text-blue-400 mt-0.5">
+                                    {playerMatches.length}
+                                </p>
+                            </div>
+                            <div className="bg-gray-950/70 border border-gray-800 rounded-xl p-3 text-center">
+                                <p className="text-[10px] uppercase font-bold text-gray-400">Total Score</p>
+                                <p className="text-xl font-black font-mono text-yellow-400 mt-0.5">
+                                    {playerMatches.reduce((acc, m) => acc + (m.score || 0), 0).toLocaleString()}
+                                    <span className="text-xs text-gray-500 font-normal ml-1">pts</span>
+                                </p>
+                            </div>
+                            <div className="bg-gray-950/70 border border-gray-800 rounded-xl p-3 flex items-center justify-center">
+                                <button
+                                    onClick={handleSyncHistoryPlayer}
+                                    disabled={syncingPlayer !== null}
+                                    className="w-full py-2 px-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md"
+                                >
+                                    <RefreshCw size={13} className={syncingPlayer ? 'animate-spin' : ''} />
+                                    <span>{syncingPlayer ? 'Syncing...' : 'Sync Score'}</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Matches Content / List */}
+                        <div className="flex-1 overflow-y-auto space-y-2 pr-1 -mr-1">
+                            {loadingMatches ? (
+                                <div className="py-16 text-center text-gray-400">
+                                    <RefreshCw size={24} className="animate-spin mx-auto text-indigo-400 mb-2" />
+                                    <p className="text-sm">Loading match history from tournament battle logs...</p>
+                                </div>
+                            ) : historyError ? (
+                                <div className="p-4 bg-red-900/30 border border-red-800 rounded-xl text-red-200 text-sm text-center">
+                                    {historyError}
+                                </div>
+                            ) : playerMatches.length === 0 ? (
+                                <div className="py-12 text-center text-gray-400 bg-gray-950/40 rounded-xl border border-dashed border-gray-800">
+                                    <Clock size={32} className="mx-auto mb-2 opacity-30 text-gray-400" />
+                                    <p className="font-bold text-sm text-gray-300">No scored matches found</p>
+                                    <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
+                                        No tournament games have been logged yet for tag <span className="font-mono text-yellow-400">{historyPlayer.playerTag || historyPlayer.id}</span>. Click "Sync Score" to fetch recent battles.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {playerMatches.map((m, idx) => {
+                                        const isWin = (m.result || '').toLowerCase().includes('victory') || (m.result || '').includes('#1');
+                                        const isSecondOrThird = (m.result || '').includes('#2') || (m.result || '').includes('#3');
+                                        const isDraw = (m.result || '').toLowerCase().includes('draw');
+
+                                        return (
+                                            <div 
+                                                key={m.id || idx} 
+                                                className="p-3.5 bg-gray-950/70 border border-gray-800 hover:border-gray-700 rounded-xl flex items-center justify-between gap-3 transition-colors"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className="text-xs font-mono font-bold text-gray-500 w-6 text-center">
+                                                        #{idx + 1}
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-bold text-white text-sm capitalize">
+                                                                {(m.mode || 'Battle').replace(/([A-Z])/g, ' $1').trim()}
+                                                            </span>
+                                                            <span className={`text-[11px] px-2 py-0.5 rounded font-black tracking-wide ${
+                                                                isWin 
+                                                                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                                                                    : isSecondOrThird
+                                                                    ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                                                                    : isDraw
+                                                                    ? 'bg-gray-700/50 text-gray-300 border border-gray-600/40'
+                                                                    : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                                                            }`}>
+                                                                {m.result || 'Completed'}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-xs text-gray-400 font-mono mt-1 flex items-center gap-2">
+                                                            <Clock size={11} className="text-gray-500" />
+                                                            <span>{formatBattleTime(m.battleTime)}</span>
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="text-right">
+                                                    <span className="text-base font-black font-mono text-emerald-400">
+                                                        +{m.score}
+                                                    </span>
+                                                    <span className="text-xs text-gray-500 ml-1">pts</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="mt-4 pt-3 border-t border-gray-800 flex justify-end">
+                            <button
+                                onClick={() => setHistoryPlayer(null)}
+                                className="px-5 py-2 bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-bold rounded-xl transition"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             {/* ========================================================================= */}
             {showPasswordModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
